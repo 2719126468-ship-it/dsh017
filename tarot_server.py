@@ -17,6 +17,8 @@ def _lan_ip():
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
+from app.auth import install_auth
+_auth_info = install_auth(app)
 
 CARDS = [
     (0,"愚者","The Fool","新的开始、冒险、纯真","鲁莽、犹豫、逃避"),

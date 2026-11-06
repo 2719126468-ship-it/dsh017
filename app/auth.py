@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import fcntl
 import hmac
 import ipaddress
 import os
@@ -38,28 +39,48 @@ def _validate_token(value: str, label: str) -> None:
 
 
 def _token_file(path: Path) -> str:
-    """Read a token or atomically create a private random one."""
+    """Read or create one private token, serializing concurrent service starts."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_symlink():
-        raise RuntimeError(f"Refusing to read token symlink: {path}")
+
+    # All four Flask processes share this lock. Without it, a second process
+    # could read the token file after O_EXCL creates it but before the first
+    # process finishes writing the token.
+    lock_path = path.parent / ".dsh017-auth.lock"
+    lock_flags = os.O_CREAT | os.O_RDWR
+    if hasattr(os, "O_NOFOLLOW"):
+        lock_flags |= os.O_NOFOLLOW
+    lock_fd = os.open(str(lock_path), lock_flags, 0o600)
     try:
-        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        if path.is_symlink() or not path.is_file():
-            raise RuntimeError(f"Token path is not a regular file: {path}")
+        os.fchmod(lock_fd, 0o600)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        if path.is_symlink():
+            raise RuntimeError(f"Refusing to read token symlink: {path}")
         try:
-            os.chmod(path, 0o600)
-        except OSError:
-            pass
-        value = path.read_text(encoding="utf-8").strip()
-    else:
-        value = secrets.token_urlsafe(32)
-        with os.fdopen(fd, "w", encoding="utf-8") as token_file:
-            token_file.write(value + "\n")
-            token_file.flush()
-            os.fsync(token_file.fileno())
-    _validate_token(value, str(path))
-    return value
+            create_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            if hasattr(os, "O_NOFOLLOW"):
+                create_flags |= os.O_NOFOLLOW
+            fd = os.open(str(path), create_flags, 0o600)
+        except FileExistsError:
+            if path.is_symlink() or not path.is_file():
+                raise RuntimeError(f"Token path is not a regular file: {path}")
+            try:
+                os.chmod(path, 0o600)
+            except OSError:
+                pass
+            value = path.read_text(encoding="utf-8").strip()
+        else:
+            value = secrets.token_urlsafe(32)
+            with os.fdopen(fd, "w", encoding="utf-8") as token_file:
+                token_file.write(value + "\n")
+                token_file.flush()
+                os.fsync(token_file.fileno())
+        _validate_token(value, str(path))
+        return value
+    finally:
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        finally:
+            os.close(lock_fd)
 
 
 def _discover_local_ips() -> set[str]:

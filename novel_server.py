@@ -27,6 +27,8 @@ except ImportError:
     USE_CFFI = False
 
 app = Flask(__name__)
+from app.auth import install_auth
+_auth_info = install_auth(app)
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 BASE_HEADERS = {"User-Agent": UA, "Accept": "application/json, text/plain, */*",
