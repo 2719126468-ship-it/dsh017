@@ -226,6 +226,85 @@ def api_ws_auto_status():
                     "downgraded": _AUTO_DOWNGRADED,
                     "threshold": _AUTO_BLOCK_THRESHOLD})
 
+@workspace_bp.route("/api/workspace/confirm_edit", methods=["POST"])
+def api_ws_confirm_edit():
+    """Apply one AI suggestion only after an explicit user confirmation.
+
+    This is a one-shot manual approval path: deny rules still win, current
+    versions and unique old_str are checked, and each change is snapshotted.
+    It does not grant standing automatic-write permission.
+    """
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"code": -1, "message": "请求参数必须是 JSON 对象"}), 400
+    file_id = body.get("file_id")
+    base_version = body.get("base_version")
+    old_str = body.get("old_str", "")
+    new_str = body.get("new_str", "")
+    if (
+        isinstance(file_id, bool) or not isinstance(file_id, int) or file_id <= 0
+        or isinstance(base_version, bool) or not isinstance(base_version, int) or base_version < 1
+        or not isinstance(old_str, str) or not isinstance(new_str, str)
+        or len(new_str) > 1_000_000
+    ):
+        return jsonify({"code": -1, "message": "文件 ID、版本或编辑内容格式无效"}), 400
+
+    with _DB_LOCK:
+        c = _db_conn()
+        row = c.execute(
+            "SELECT name,content,version,kind FROM workspace_files "
+            "WHERE id=? AND deleted_at IS NULL",
+            (file_id,),
+        ).fetchone()
+        if row is None or row["kind"] != "file":
+            c.close()
+            return jsonify({"code": -1, "message": "文件不存在"}), 404
+        if row["version"] != base_version:
+            current_version = row["version"]
+            c.close()
+            return jsonify({
+                "code": 409, "action": "ask", "reason": "version_conflict",
+                "message": "文件已被修改，请重新打开后再确认",
+                "current_version": current_version,
+            }), 409
+        if not _ws_scope_check(row["name"]):
+            c.close()
+            return jsonify({"code": 403, "message": "文件名不在允许的工作区范围内"}), 403
+        rule = _ws_rule_lookup(row["name"], "edit")
+        if rule == "deny":
+            c.close()
+            return jsonify({"code": 403, "message": "规则禁止修改该文件"}), 403
+
+        current_content = row["content"]
+        if old_str == "":
+            updated_content = new_str
+        else:
+            occurrences = current_content.count(old_str)
+            if occurrences != 1:
+                c.close()
+                return jsonify({
+                    "code": 409, "reason": "old_str_not_unique",
+                    "message": "待替换内容必须恰好出现一次；请刷新文件后重新生成建议",
+                }), 409
+            updated_content = current_content.replace(old_str, new_str, 1)
+
+        new_version = row["version"] + 1
+        now = int(time.time())
+        _snapshot_file(c, file_id, current_content, "ai_confirmed_before", row["version"])
+        c.execute(
+            "UPDATE workspace_files SET content=?,version=?,updated_at=? WHERE id=?",
+            (updated_content, new_version, now, file_id),
+        )
+        _snapshot_file(c, file_id, updated_content, "ai_confirmed", row["version"])
+        c.commit()
+        c.close()
+
+    return jsonify({
+        "code": 0, "version": new_version, "content": updated_content,
+        "confirmed_by_user": True,
+    })
+
+
 @workspace_bp.route("/api/workspace/apply_edit", methods=["POST"])
 def api_ws_apply_edit():
     body = request.get_json(force=True, silent=True)
