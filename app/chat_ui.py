@@ -113,6 +113,7 @@ def api_chat():
         max_attempts = 3
         last_err = None
         for attempt in range(max_attempts):
+            r = None
             try:
                 r = client.s.post(ZHIPU_BASE, headers=headers, json=payload,
                                   stream=True, timeout=180)
@@ -282,6 +283,12 @@ def api_chat():
                     continue
                 yield "data: " + json.dumps({"error": last_err}) + "\n\n"
                 return
+            finally:
+                if r is not None:
+                    try:
+                        r.close()
+                    except Exception:
+                        pass
 
 
     return Response(generate(), mimetype="text/event-stream",
