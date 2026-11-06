@@ -1896,6 +1896,7 @@ html[data-theme="dark"] .canvas-pane{
           assistantRow.appendChild(stopNote);
           attachAssistantActions(assistantRow, fullText, stoppedIdx);
           assistantRow.classList.add('show-actions');
+          setTimeout(function(){ assistantRow.classList.remove('show-actions'); }, 2800);
         } else if(assistantRow && assistantRow.parentNode) {
           assistantRow.parentNode.removeChild(assistantRow);
         }
