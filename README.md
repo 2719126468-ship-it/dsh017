@@ -33,6 +33,7 @@
 访问：`http://<局域网IP>:8092/`
 
 > 安全提示：主服务监听局域网网卡（`0.0.0.0`），请只在可信家庭/个人网络使用，不要直接暴露到公网或不可信公共 Wi-Fi。代理接口仅允许 HTTPS 的 B 站/CDN 域名，并拒绝解析到非公网 IP 的地址。
+
 ## 快速开始
 
 ```bash
@@ -86,7 +87,8 @@ GitHub Actions 会在 push、PR 和手动触发时运行 Python 3.10–3.12 测�
 │   ├── db.py              SQLite 层 + 备份 + 规则表
 │   ├── bili_client.py     BiliClient + WBI 签名 + curl_cffi 共享实例
 │   ├── metrics.py         指标计数器 + playurl 缓存
-│   ├── llm_config.py      ZHIPU API Key / BASE / MODEL│   ├── bili_routes.py     B 站 8 路由
+│   ├── llm_config.py      ZHIPU API Key / BASE / MODEL
+│   ├── bili_routes.py     B 站 8 路由
 │   ├── chat_routes.py     预设 CRUD + summarize
 │   ├── chat_ui.py         /api/chat 流式 + CHAT_HTML
 │   ├── workspace_routes.py  workspace + history/fav/progress/backup

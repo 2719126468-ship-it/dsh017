@@ -37,7 +37,8 @@ app.register_blueprint(workspace_bp)
 
 from app.shorts_routes import shorts_bp
 
-def _lan_ip():    try:
+def _lan_ip():
+    try:
         import socket as _s
         _sock = _s.socket(_s.AF_INET, _s.SOCK_DGRAM)
         _sock.connect(("8.8.8.8", 80))
@@ -51,13 +52,14 @@ app.register_blueprint(shorts_bp)
 app.register_blueprint(play_bp)
 app.register_blueprint(misc_bp)
 
+
 # Remote clients must authenticate; requests originating from this host are trusted.
 from app.auth import install_auth
 _auth_info = install_auth(app)
 
 
 if __name__ == "__main__":
-print(f"🎬 Bili Console v6: http://{_lan_ip()}:8092/")
+    print(f"🎬 Bili Console v6: http://{_lan_ip()}:8092/")
     normal_source = "环境变量 DSH017_AUTH_TOKEN" if os.environ.get("DSH017_AUTH_TOKEN") else _auth_info["token_files"][0]
     admin_source = "环境变量 DSH017_ADMIN_TOKEN" if os.environ.get("DSH017_ADMIN_TOKEN") else _auth_info["token_files"][1]
     print("🔐 远程普通 Token 来源：" + normal_source)
