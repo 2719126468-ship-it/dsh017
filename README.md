@@ -168,7 +168,9 @@ Magpie 默认端口可通过下方的「检测本机 Magpie」一键发现；若
 
 在同一台设备上启动 Magpie Gateway 后，进入「模型供应商」并点击「检测本机 Magpie」。DSH 只会访问固定的 loopback 地址 `127.0.0.1:3425`，核对 `/api/hello` 的 Magpie 标识，并从 `/v1/models` 读取可用模型；检测响应不会包含账号凭据。保存后可在聊天和工作区中选择 `magpie` 供应商。对于本机网关，DSH 使用 `magpie-dsh017` 作为调用方标识；它不是 Magpie 账号密码或订阅凭据。
 
-Magpie 负责订阅登录和令牌刷新，DSH 不会读取 Magpie 或 Qoder 的浏览器 Cookie。Android ARM64 终端版本可从 [Magpie Releases](https://github.com/yetone/magpie-releases/releases/latest) 获取。默认网关端口为 3425；若自行修改了 Magpie 端口，可继续通过自定义供应商手动配置。
+**Qoder 接入路径：** 在 Magpie 的 Plugins 中安装 `@magpie-community/opencode-qoder-auth`，对 `qoder` provider 完成插件提供的浏览器授权，然后回到 DSH 检测本机 Magpie 并同步模型目录。Qoder 账号授权与令牌刷新由 Magpie 插件负责，DSH 只调用 Magpie Gateway；不会读取 Qoder 浏览器 Cookie，也不自行模拟 Qoder 私有登录协议。
+
+Magpie 的登录与模型路由见 [官方入门文档](https://usemagpie.ai/docs/start) 和 [插件文档](https://usemagpie.ai/docs/plugins)。Android ARM64 终端版本可从 [Magpie Releases](https://github.com/yetone/magpie-releases/releases/latest) 获取。默认网关端口为 3425；若自行修改了 Magpie 端口，可继续通过自定义供应商手动配置。
 
 ## 已知限制
 
