@@ -686,6 +686,16 @@ html[data-dsh-theme="claude"] .mask {
   -webkit-overflow-scrolling: touch;
 }
 .md-code code { font: inherit; }
+.md-code-copy {
+  border: 1px solid var(--border-2, rgba(127,127,127,.2));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2, #777);
+  padding: 3px 8px;
+  font: 10px/1.3 var(--dsh-font, sans-serif);
+  cursor: pointer;
+}
+.md-code-copy:active { transform: scale(.96); }
 .md-link {
   color: var(--accent, #555);
   text-decoration: underline;
@@ -774,13 +784,24 @@ html[data-dsh-theme="claude"] .mask {
   to { opacity: 1; transform: none; }
 }
 @media (max-width: 1024px) {
-  .canvas-pane { display: none; width: 100%; flex: 1 1 100%; transform: translateY(10px); }
+  .canvas-pane {
+    display: flex;
+    width: 0;
+    min-width: 0;
+    flex: 0 0 0;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(10px);
+  }
   .canvas-pane.open {
     display: flex;
     width: 100%;
     min-width: 0;
     flex: 1 1 100%;
+    visibility: visible;
     opacity: 1;
+    pointer-events: auto;
     transform: translateY(0);
   }
   .chat-pane { min-width: 0; }
