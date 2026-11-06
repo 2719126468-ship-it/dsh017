@@ -32,8 +32,9 @@ from app.auth import install_auth
 _auth_info = install_auth(app)
 
 NOVEL_IMAGE_HOSTS = ("byteimg.com", "p6-tt.bytecdn.cn")
-from app.auth import install_auth
-_auth_info = install_auth(app)
+NOVEL_MAX_QUERY_CHARS = 100
+NOVEL_MAX_PAGE = 100
+NOVEL_MAX_ID_CHARS = 128
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 BASE_HEADERS = {"User-Agent": UA, "Accept": "application/json, text/plain, */*",
@@ -429,10 +430,14 @@ def api_search():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify({"code": -1, "message": "请输入关键词"})
+    if len(q) > NOVEL_MAX_QUERY_CHARS:
+        return jsonify({"code": -1, "message": "关键词不能超过100个字符"}), 400
     try:
         page = int(request.args.get("page", 1))
-    except Exception:
-        page = 1
+    except (TypeError, ValueError):
+        return jsonify({"code": -1, "message": "页码必须是整数"}), 400
+    if not 1 <= page <= NOVEL_MAX_PAGE:
+        return jsonify({"code": -1, "message": "页码范围为1–100"}), 400
     try:
         books = client.search(q, page)
         out = []
@@ -453,6 +458,8 @@ def api_book():
     book_id = request.args.get("book_id", "").strip()
     if not book_id:
         return jsonify({"code": -1, "message": "缺少 book_id"})
+    if len(book_id) > NOVEL_MAX_ID_CHARS:
+        return jsonify({"code": -1, "message": "book_id 过长"}), 400
     try:
         info = client.book_info(book_id)
         chapters = client.catalog(book_id)
@@ -473,6 +480,8 @@ def api_content():
     item_id = request.args.get("item_id", "").strip()
     if not item_id:
         return jsonify({"code": -1, "message": "缺少 item_id"})
+    if len(item_id) > NOVEL_MAX_ID_CHARS:
+        return jsonify({"code": -1, "message": "item_id 过长"}), 400
     try:
         text = client.content(item_id)
         return jsonify({"code": 0, "item_id": item_id, "content": text})
