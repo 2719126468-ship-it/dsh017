@@ -22,8 +22,8 @@ class AndroidPackagingContractTests(unittest.TestCase):
         gradle = self.read("app/build.gradle")
         self.assertIn('version = "3.11"', gradle)
         self.assertIn('buildPython("python3.11")', gradle)
-        self.assertIn('version = "3.12"', gradle)
-        self.assertIn('buildPython("python3.12")', gradle)
+        self.assertIn('version = "3.13"', gradle)
+        self.assertIn('buildPython("python3.13")', gradle)
         self.assertIn('install("curl_cffi==0.16.2")', gradle)
         self.assertIn('install("requests==2.32.5")', gradle)
 
