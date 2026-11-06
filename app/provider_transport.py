@@ -47,7 +47,8 @@ def resolve_provider_target(url: str) -> ProviderTarget:
         parsed = urlsplit(url)
         scheme = parsed.scheme.lower()
         hostname = (parsed.hostname or "").rstrip(".").lower()
-        port = parsed.port or (443 if scheme == "https" else 80)
+        parsed_port = parsed.port
+        port = parsed_port if parsed_port is not None else (443 if scheme == "https" else 80)
     except ValueError as error:
         raise ValueError("供应商地址格式无效") from error
 
@@ -61,6 +62,12 @@ def resolve_provider_target(url: str) -> ProviderTarget:
         or not 1 <= port <= 65535
     ):
         raise ValueError("供应商地址必须是无凭据、无查询参数的 HTTP(S) URL")
+
+    # Convert internationalized hostnames before placing them in Host/SNI.
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        hostname = hostname.encode("idna").decode("ascii")
 
     # HTTP is permitted only for a literal loopback address or localhost.
     if scheme == "http" and hostname != "localhost":
