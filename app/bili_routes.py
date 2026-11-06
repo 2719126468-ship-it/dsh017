@@ -12,7 +12,8 @@ from flask import Blueprint, request, jsonify, Response
 from app.bili_client import client, UA
 from app.metrics import _metric_inc, _playurl_cache_get, _playurl_cache_set
 from app.db import db_history_add
-from app.security import (validate_remote_url, safe_image_content_type,\n                          image_response_size_within_limit, iter_limited_response)
+from app.security import (validate_remote_url, safe_image_content_type,
+                          image_response_size_within_limit, iter_limited_response)
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,8 @@ bili_bp = Blueprint('bili', __name__)
 
 _MAX_SEARCH_KEYWORD_CHARS = 100
 _MAX_SEARCH_PAGE = 100
-_MAX_AUDIO_BYTES = 128 * 1024 * 1024\n_MAX_PROXY_IMAGE_BYTES = 5 * 1024 * 1024
+_MAX_AUDIO_BYTES = 128 * 1024 * 1024
+_MAX_PROXY_IMAGE_BYTES = 5 * 1024 * 1024
 _MEDIA_HOSTS = ("bilivideo.com", "bilivideo.cn", "hdslb.com", "bilibili.com")
 
 def _safe_unlink(path):
