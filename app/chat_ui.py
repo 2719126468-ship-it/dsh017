@@ -884,12 +884,13 @@ html[data-theme="dark"] .canvas-pane{
       <span class="model">GLM-4.7</span>
     </div>
     <div class="messages-wrap">
-      <div class="messages" id="msgs">
+      <div class="messages" id="msgs" aria-live="polite" aria-relevant="additions text">
         <div class="welcome" id="welcome">
           <h2>有什么可以帮你的？</h2>
           <p>输入消息开始对话 · 支持流式输出与预设切换</p>
         </div>
       </div>
+      <button id="jumpLatest" type="button" aria-label="回到最新消息">↓ 最新消息</button>
     </div>
     <div class="composer" id="composer">
       <textarea id="input" rows="1" placeholder="给智谱清言发送消息…"></textarea>
@@ -937,21 +938,48 @@ html[data-theme="dark"] .canvas-pane{
   var sidebar   = document.getElementById('sidebar');
   var mask      = document.getElementById('mask');
   var presetSel = document.getElementById('presetSel');
+  var composer  = document.getElementById('composer');
+  var jumpLatest = document.getElementById('jumpLatest');
 
   if(typeof window.wsContext === 'undefined') window.wsContext = null;
-var history = [];          // [{role, content}]
+  var history = [];          // [{role, content}]
   var busy = false;
   var currentSystem = '';
+  var autoFollow = true;
+  var mobileRefocusAfterStream = false;
+
+  function isNearBottom() {
+    return msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 120;
+  }
+  function updateJumpLatest() {
+    if(jumpLatest) jumpLatest.classList.toggle('visible', !isNearBottom());
+  }
+  msgs.addEventListener('scroll', function() {
+    autoFollow = isNearBottom();
+    updateJumpLatest();
+  }, {passive:true});
+  if(jumpLatest) {
+    jumpLatest.onclick = function() {
+      autoFollow = true;
+      scrollBottom(true);
+      jumpLatest.classList.remove('visible');
+    };
+  }
 
   /* ================= 侧边栏 ================= */
   function openSb(){
     sidebar.classList.add('open');
     mask.classList.add('show');
+    sidebar.setAttribute('aria-hidden', 'false');
   }
   function closeSb(){
     sidebar.classList.remove('open');
     mask.classList.remove('show');
+    sidebar.setAttribute('aria-hidden', 'true');
   }
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && sidebar.classList.contains('open')) closeSb();
+  });
   function isMobile(){ return window.innerWidth <= 1024; }
 
   document.getElementById('menuBtn').onclick = openSb;
@@ -985,9 +1013,166 @@ var history = [];          // [{role, content}]
   }, {passive:true});
 
   /* ================= 工具 ================= */
-  function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){
+  function esc(s){return String(s||'').replace(/[&<>\"]/g,function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
-  function scrollBottom(){ msgs.scrollTop = msgs.scrollHeight; }
+  function scrollBottom(force){
+    if(force || autoFollow) msgs.scrollTop = msgs.scrollHeight;
+    updateJumpLatest();
+  }
+
+  // Safe, dependency-free Markdown rendering for completed assistant messages.
+  // Streaming stays as one text node; rich blocks are built once when the stream ends.
+  function appendInlineMarkdown(parent, source) {
+    var text = String(source || '');
+    var tick = String.fromCharCode(96);
+    var tokenPattern = new RegExp('(' + tick + '[^' + tick + ']+' + tick +
+      '|\\*\\*[^*]+\\*\\*|__[^_]+__|~~[^~]+~~|\\*[^*]+\\*|_[^_]+_' +
+      '|\\[[^\\]]+\\]\\(https?:\\/\\/[^\\s)]+\\))', 'g');
+    var last = 0, match;
+    while((match = tokenPattern.exec(text))) {
+      if(match.index > last) parent.appendChild(document.createTextNode(text.slice(last, match.index)));
+      var token = match[0], node = null;
+      if(token.charAt(0) === tick) {
+        node = document.createElement('code');
+        node.className = 'md-inline-code';
+        node.textContent = token.slice(1, -1);
+      } else if(token.indexOf('**') === 0 || token.indexOf('__') === 0) {
+        node = document.createElement('strong');
+        node.textContent = token.slice(2, -2);
+      } else if(token.indexOf('~~') === 0) {
+        node = document.createElement('del');
+        node.textContent = token.slice(2, -2);
+      } else if(token.charAt(0) === '*' || token.charAt(0) === '_') {
+        node = document.createElement('em');
+        node.textContent = token.slice(1, -1);
+      } else {
+        var linkMatch = token.match(/^\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)$/);
+        if(linkMatch) {
+          node = document.createElement('a');
+          node.className = 'md-link';
+          node.textContent = linkMatch[1];
+          node.href = linkMatch[2];
+          node.target = '_blank';
+          node.rel = 'noopener noreferrer';
+        }
+      }
+      if(node) parent.appendChild(node);
+      else parent.appendChild(document.createTextNode(token));
+      last = tokenPattern.lastIndex;
+    }
+    if(last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+  }
+
+  function renderAssistantMarkdown(target, source) {
+    target.textContent = '';
+    var lines = String(source || '').replace(/\\r/g, '').split('\\n');
+    var i = 0;
+    var tick = String.fromCharCode(96);
+    var fenceStart = new RegExp('^\\s*' + tick + tick + tick + '\\s*([a-zA-Z0-9_+.-]*)');
+    var fenceEnd = new RegExp('^\\s*' + tick + tick + tick + '\\s*$');
+    function isBlockStart(line) {
+      return fenceStart.test(line) || /^#{1,3}\\s/.test(line) ||
+        /^\\s*(?:[-*+]\\s+|\\d+\\.\\s+)/.test(line) ||
+        /^\\s*>/.test(line) || /^\\s*([-*_]\\s*){3,}$/.test(line);
+    }
+    while(i < lines.length) {
+      var line = lines[i];
+      if(!line.trim()) { i++; continue; }
+
+      var fence = line.match(fenceStart);
+      if(fence) {
+        var codeLines = [];
+        i++;
+        while(i < lines.length && !fenceEnd.test(lines[i])) codeLines.push(lines[i++]);
+        if(i < lines.length) i++;
+        var codeWrap = document.createElement('div');
+        codeWrap.className = 'md-code md-rendered';
+        var codeHead = document.createElement('div');
+        codeHead.className = 'md-code-head';
+        var lang = document.createElement('span');
+        lang.textContent = fence[1] || 'CODE';
+        codeHead.appendChild(lang);
+        codeWrap.appendChild(codeHead);
+        var pre = document.createElement('pre');
+        var code = document.createElement('code');
+        code.textContent = codeLines.join('\\n');
+        pre.appendChild(code);
+        codeWrap.appendChild(pre);
+        target.appendChild(codeWrap);
+        continue;
+      }
+
+      var heading = line.match(/^\\s*(#{1,3})\\s+(.+)$/);
+      if(heading) {
+        var h = document.createElement('h' + heading[1].length);
+        h.className = 'md-h md-h' + heading[1].length + ' md-rendered';
+        appendInlineMarkdown(h, heading[2]);
+        target.appendChild(h);
+        i++;
+        continue;
+      }
+
+      if(/^\\s*([-*_]\\s*){3,}$/.test(line)) {
+        var hr = document.createElement('hr');
+        hr.className = 'md-hr';
+        target.appendChild(hr);
+        i++;
+        continue;
+      }
+
+      if(/^\\s*>/.test(line)) {
+        var quoteLines = [];
+        while(i < lines.length && /^\\s*>/.test(lines[i])) {
+          quoteLines.push(lines[i++].replace(/^\\s*>\\s?/, ''));
+        }
+        var quote = document.createElement('blockquote');
+        quote.className = 'md-quote md-rendered';
+        appendInlineMarkdown(quote, quoteLines.join(' '));
+        target.appendChild(quote);
+        continue;
+      }
+
+      var unordered = /^\\s*[-*+]\\s+/.test(line);
+      var ordered = /^\\s*\\d+\\.\\s+/.test(line);
+      if(unordered || ordered) {
+        var list = document.createElement(ordered ? 'ol' : 'ul');
+        list.className = 'md-list md-rendered';
+        var matcher = ordered ? /^\\s*\\d+\\.\\s+/ : /^\\s*[-*+]\\s+/;
+        while(i < lines.length && matcher.test(lines[i])) {
+          var li = document.createElement('li');
+          appendInlineMarkdown(li, lines[i++].replace(matcher, ''));
+          list.appendChild(li);
+        }
+        target.appendChild(list);
+        continue;
+      }
+
+      var paragraphLines = [];
+      while(i < lines.length && lines[i].trim() && !isBlockStart(lines[i])) {
+        paragraphLines.push(lines[i++]);
+      }
+      if(!paragraphLines.length) paragraphLines.push(lines[i++]);
+      var p = document.createElement('p');
+      p.className = 'md-p md-rendered';
+      appendInlineMarkdown(p, paragraphLines.join('\\n'));
+      target.appendChild(p);
+    }
+  }
+
+  function flushStreamText(state) {
+    if(state.pending && state.textNode) {
+      state.textNode.nodeValue += state.pending;
+      state.pending = '';
+    }
+    state.queued = false;
+    if(autoFollow) scrollBottom();
+  }
+  function queueStreamText(state, chunk) {
+    state.pending += chunk;
+    if(state.queued) return;
+    state.queued = true;
+    requestAnimationFrame(function(){ flushStreamText(state); });
+  }
 
   /* ================= 预设 ================= */
   fetch('/api/presets').then(function(r){return r.json()}).then(function(j){
@@ -1042,12 +1227,14 @@ var history = [];          // [{role, content}]
     msgs.innerHTML = '';
     if(history.length === 0){
       msgs.innerHTML = '<div class="welcome" id="welcome"><h2>有什么可以帮你的？</h2><p>输入消息开始对话 · 支持流式输出与预设切换</p></div>';
+      autoFollow = true;
+      updateJumpLatest();
       return;
     }
     history.forEach(function(m, idx){
       appendMessage(m, idx);
     });
-    scrollBottom();
+    scrollBottom(true);
   }
 
   function appendMessage(m, idx){
@@ -1057,7 +1244,8 @@ var history = [];          // [{role, content}]
 
     var body = document.createElement('div');
     body.className = 'msg-body';
-    body.textContent = m.content;
+    if(m.role === 'assistant') renderAssistantMarkdown(body, m.content);
+    else body.textContent = m.content;
     row.appendChild(body);
 
     // 用户消息：编辑框 + 编辑按钮
