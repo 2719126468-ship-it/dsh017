@@ -18,8 +18,7 @@ from urllib.parse import urlsplit, urlunsplit
 from flask import Blueprint, jsonify, request, Response
 
 from app.db import _DATA_DIR
-from app.security import validate_provider_url
-from app.provider_transport import provider_request
+from app.provider_transport import provider_request, validate_provider_url_syntax
 
 provider_bp = Blueprint("providers", __name__)
 _LOCK = threading.RLock()
@@ -82,7 +81,7 @@ def _normalise_base_url(raw):
     ):
         raise ValueError("Base URL 必须是无账号密码、无查询参数的 HTTP(S) 地址")
     normalized = urlunsplit((parsed.scheme.lower(), parsed.netloc, parsed.path.rstrip("/"), "", ""))
-    if not validate_provider_url(normalized):
+    if not validate_provider_url_syntax(normalized):
         raise ValueError(
             "供应商地址不安全：远程服务必须使用解析到公网地址的 HTTPS；"
             "HTTP 仅允许本机 loopback 网关"
