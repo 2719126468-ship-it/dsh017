@@ -31,7 +31,7 @@ class ChatProviderRoutingTests(unittest.TestCase):
         response = None
         with patch("app.chat_ui.resolve_provider", return_value=(
             provider, "provider-secret", "https://gateway.example.test/v1/chat/completions"
-        )), patch("app.chat_ui.client.s.post", return_value=upstream) as post:
+        )), patch("app.chat_ui.provider_request", return_value=upstream) as post:
             response = self.client.post("/api/chat", json={
                 "provider_id": "custom",
                 "model": "custom-model",
@@ -48,7 +48,7 @@ class ChatProviderRoutingTests(unittest.TestCase):
 
     def test_unknown_provider_or_model_is_rejected_before_network(self):
         with patch("app.chat_ui.resolve_provider", side_effect=ValueError("provider unavailable")), \
-             patch("app.chat_ui.client.s.post") as post:
+             patch("app.chat_ui.provider_request") as post:
             response = self.client.post("/api/chat", json={
                 "provider_id": "missing",
                 "model": "not-listed",
