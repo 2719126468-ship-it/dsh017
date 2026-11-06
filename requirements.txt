@@ -1,4 +1,4 @@
-flask
-waitress
+Flask>=3.0,<4
+waitress>=3.0,<4
 curl_cffi==0.13.0
-requests
+requests>=2.32,<3
