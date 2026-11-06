@@ -52,6 +52,14 @@ class ChatProductMotionTests(unittest.TestCase):
         self.assertIn(".mask.show", _THEME_CSS)
         self.assertIn("@media (prefers-reduced-motion: reduce)", _THEME_CSS)
 
+    def test_canvas_pane_uses_transitionable_closed_and_open_states(self):
+        self.assertIn(".canvas-pane{display:flex;flex:0 0 0;width:0", CHAT_HTML)
+        self.assertIn("transition:width var(--dur-panel)", CHAT_HTML)
+        self.assertIn(".canvas-pane.open{flex:0 0 clamp(300px,42%,620px)", CHAT_HTML)
+        self.assertIn("@media (max-width:1024px)", CHAT_HTML)
+        self.assertIn(".canvas-pane.open{flex:1 1 100%;width:100%;height:100%", CHAT_HTML)
+        self.assertNotIn(".canvas-pane{display:none", CHAT_HTML)
+
     def test_theme_panel_is_accessible_and_uses_animated_open_state(self):
         self.assertIn('aria-hidden="true"', _THEME_WIDGET)
         self.assertIn('aria-expanded="false"', _THEME_WIDGET)
