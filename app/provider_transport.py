@@ -160,8 +160,12 @@ def validate_provider_url_syntax(url: str) -> bool:
         ):
             return False
         if scheme == "https":
-            hostname.encode("idna")
-            return True
+            try:
+                literal = ipaddress.ip_address(hostname)
+            except ValueError:
+                hostname.encode("idna")
+                return True
+            return _is_public(literal)
         if hostname == "localhost":
             return True
         try:
