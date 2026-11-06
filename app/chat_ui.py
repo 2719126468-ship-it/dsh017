@@ -489,7 +489,8 @@ html,body{background:var(--bg);color:var(--text);height:100%;
   .canvas-pane{flex:0 0 0;width:100%;height:0;min-height:0;
     border-left:0;border-top:0 solid transparent;transform:translateY(8px);
     transition:flex-basis var(--dur-panel) var(--ease),height var(--dur-panel) var(--ease),opacity 220ms var(--ease),
-               transform var(--dur-panel) var(--ease),border-color var(--dur-panel) var(--ease),\n               visibility 0s linear var(--dur-panel)}
+               transform var(--dur-panel) var(--ease),border-color var(--dur-panel) var(--ease),
+               visibility 0s linear var(--dur-panel)}
   .canvas-pane.open{flex:1 1 100%;width:100%;height:100%;min-height:0;
     border-left:0;border-top:1px solid var(--border);transform:translateY(0);
     visibility:visible;transition-delay:0s}
