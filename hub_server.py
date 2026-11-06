@@ -130,7 +130,9 @@ h1{font-family:Georgia,"Noto Serif SC",serif;font-size:22px;font-weight:600;
   var SERVICES = __SERVICES__;
   var HOST = location.hostname || "127.0.0.1";
   var grid=document.getElementById("grid"),foot=document.getElementById("foot");
-  var okCount=0,failCount=0;
+  var okCount=0,failCount=0,uniquePorts=Object.create(null);
+  SERVICES.forEach(function(service){uniquePorts[service.port]=true;});
+  var uniqueCount=Object.keys(uniquePorts).length;
   SERVICES.forEach(function(s){
     var a=document.createElement("a");
     a.className="svc"; a.href=s.url.replace("{host}",HOST);
@@ -154,14 +156,17 @@ h1{font-family:Georgia,"Noto Serif SC",serif;font-size:22px;font-weight:600;
     fetch("/api/status",{cache:"no-store"})
       .then(function(r){return r.ok?r.json():Promise.reject(r.status)})
       .then(function(j){
-        var states=j.services||{};
+        var states=j.services||{},countedPorts=Object.create(null);
         SERVICES.forEach(function(s){
           var data=states[String(s.port)]||{};
           var online=data.online===true;
           document.querySelectorAll('.dot[data-idx="'+s.port+'"]').forEach(function(dot){
             dot.className="dot "+(online?"ok":"fail");
           });
-          if(online)okCount++;else failCount++;
+          if(!countedPorts[s.port]){
+            countedPorts[s.port]=true;
+            if(online)okCount++;else failCount++;
+          }
           if(s.metrics&&data.metrics){
             var m=data.metrics, d=m.daily||{}, c=m.counters||{};
             var st=document.getElementById("stats-"+s.port);
@@ -183,7 +188,7 @@ h1{font-family:Georgia,"Noto Serif SC",serif;font-size:22px;font-weight:600;
             dot.className="dot fail";
           });
         });
-        foot.textContent="0 online · "+SERVICES.length+" offline";
+        foot.textContent="0 online · "+uniqueCount+" offline";
       });
   }
   checkAll();
