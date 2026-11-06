@@ -6,6 +6,7 @@ import json
 import time
 import sqlite3
 import threading
+import shutil
 
 # ==================== SQLite 持久化 ====================
 _DATA_DIR = os.path.abspath(os.environ.get(
@@ -13,6 +14,13 @@ _DATA_DIR = os.path.abspath(os.environ.get(
 ))
 _DB_PATH = os.path.abspath(os.environ.get("DSH017_DB_PATH", os.path.join(_DATA_DIR, "bili_data.db")))
 os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
+# One-time migration from the previous fixed container path; never overwrite new data.
+_LEGACY_DB_PATH = "/root/bili_data.db"
+if not os.environ.get("DSH017_DB_PATH") and not os.path.exists(_DB_PATH) and os.path.isfile(_LEGACY_DB_PATH):
+    try:
+        shutil.copy2(_LEGACY_DB_PATH, _DB_PATH)
+    except OSError:
+        pass
 _DB_LOCK = threading.RLock()
 
 def _db_conn():
