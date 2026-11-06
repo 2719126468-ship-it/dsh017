@@ -45,6 +45,16 @@ class SidecarAuthenticationTests(unittest.TestCase):
             environ_overrides={"REMOTE_ADDR": "198.51.100.23"},
         )
 
+    def test_every_sidecar_uses_one_auth_hook_and_request_body_limit(self):
+        for name, app in self.apps.items():
+            with self.subTest(service=name):
+                hooks = [
+                    fn for fn in app.before_request_funcs.get(None, [])
+                    if getattr(fn, "__name__", "") == "_dsh017_auth_gate"
+                ]
+                self.assertEqual(len(hooks), 1)
+                self.assertEqual(app.config["MAX_CONTENT_LENGTH"], 8 * 1024 * 1024)
+
     def test_every_sidecar_rejects_remote_requests_without_token(self):
         for name, app in self.apps.items():
             with self.subTest(service=name):
