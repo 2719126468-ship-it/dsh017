@@ -47,6 +47,7 @@ class ChatProductMotionTests(unittest.TestCase):
         self.assertIn("if(buffer) handleStreamLine(buffer)", CHAT_HTML)
         self.assertIn("if(j.error)", CHAT_HTML)
         self.assertIn("if(j.type === 'error')", CHAT_HTML)
+        self.assertIn("console.warn('workspace error:', j.message)", CHAT_HTML)
         self.assertNotIn("pe.message.indexOf('error')", CHAT_HTML)
 
     def test_product_themes_have_distinct_chat_layouts_and_motion(self):
