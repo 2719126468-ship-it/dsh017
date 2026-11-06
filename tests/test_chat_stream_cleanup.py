@@ -41,7 +41,7 @@ class ChatStreamCleanupTests(unittest.TestCase):
                 "test-api-key",
                 "https://provider.example.test/v1/chat/completions",
             ),
-        ), patch("app.chat_ui.client.s.post", return_value=upstream):
+        ), patch("app.chat_ui.client.s.post", return_value=upstream) as upstream_post:
             with app.test_request_context("/api/chat", method="POST", json=payload):
                 response = api_chat()
                 self.assertEqual(response.status_code, 200)
@@ -51,6 +51,7 @@ class ChatStreamCleanupTests(unittest.TestCase):
                 stream.close()
 
         self.assertTrue(upstream.closed)
+        self.assertIs(upstream_post.call_args.kwargs.get("allow_redirects"), False)
 
 
 if __name__ == "__main__":
