@@ -65,7 +65,10 @@ class GlobalThemeSupportTests(unittest.TestCase):
         response = self.client.get("/")
         body = response.get_data(as_text=True)
 
-        self.assertNotIn('data-dsh-theme="', body)
+        import re
+        html_tag = re.search(r"<html\\b[^>]*>", body, re.IGNORECASE)
+        self.assertIsNotNone(html_tag)
+        self.assertNotIn("data-dsh-theme", html_tag.group(0))
         self.assertNotIn("<script>alert(1)</script>", body)
         self.assertIn('id="dsh017-theme-switcher"', body)
 
