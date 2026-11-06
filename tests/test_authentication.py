@@ -58,6 +58,19 @@ class RemoteAuthTests(unittest.TestCase):
         value = base64.b64encode(("dsh017:" + token).encode()).decode()
         return {"Authorization": "Basic " + value}
 
+    def test_installer_sets_default_request_body_limit(self):
+        self.assertEqual(self.app.config["MAX_CONTENT_LENGTH"], 8 * 1024 * 1024)
+
+    def test_oversized_request_is_rejected_even_from_local_host(self):
+        self.app.config["MAX_CONTENT_LENGTH"] = 32
+        response = self.client.post(
+            "/api/write",
+            data=b"x" * 33,
+            environ_base={"REMOTE_ADDR": "127.0.0.1"},
+        )
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(response.get_json()["code"], -413)
+
     def test_host_loopback_is_exempt(self):
         response = self.client.get("/", environ_base={"REMOTE_ADDR": "127.0.0.1"})
         self.assertEqual(response.status_code, 200)
