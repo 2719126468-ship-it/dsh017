@@ -7,6 +7,7 @@ private 0600 file; the Android WebView bridge keeps them in Android Keystore.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -24,7 +25,7 @@ provider_bp = Blueprint("providers", __name__)
 _LOCK = threading.RLock()
 _RUNTIME_SECRETS = {}
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
-_MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,159}$")
+_MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/+@-]{0,159}$")
 _CONFIG_PATH = os.path.join(_DATA_DIR, "providers.json")
 _SECRETS_PATH = os.path.join(_DATA_DIR, "provider_secrets.json")
 
@@ -324,6 +325,76 @@ def fetch_provider_models(provider_id):
     return sorted(set(models))
 
 
+
+_MAGPIE_HOST = "127.0.0.1"
+_MAGPIE_PORT = 3425
+_MAGPIE_APP_KEY = "magpie-dsh017"
+_MAGPIE_MAX_JSON_BYTES = 1024 * 1024
+
+
+def _magpie_get_json(path, include_app_key=False):
+    """Read one fixed local Magpie endpoint without proxies or redirects."""
+    if path not in {"/api/hello", "/v1/models"}:
+        raise ValueError("Magpie endpoint is not allowed")
+    connection = http.client.HTTPConnection(
+        _MAGPIE_HOST, _MAGPIE_PORT, timeout=3
+    )
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "DSH-017/0.1",
+        "Connection": "close",
+    }
+    if include_app_key:
+        headers["Authorization"] = "Bearer " + _MAGPIE_APP_KEY
+    try:
+        connection.request("GET", path, headers=headers)
+        response = connection.getresponse()
+        if response.status != 200:
+            response.read(512)
+            raise RuntimeError(
+                "本机 Magpie 接口 %s 返回 HTTP %d" % (path, response.status)
+            )
+        raw = response.read(_MAGPIE_MAX_JSON_BYTES + 1)
+        if len(raw) > _MAGPIE_MAX_JSON_BYTES:
+            raise RuntimeError("本机 Magpie 返回的数据超过 1 MiB 限制")
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as error:
+            raise RuntimeError("本机 Magpie 返回的 JSON 无效") from error
+        if not isinstance(payload, dict):
+            raise RuntimeError("本机 Magpie 返回了无效的数据结构")
+        return payload
+    finally:
+        connection.close()
+
+
+def discover_local_magpie():
+    """Identify the local Magpie gateway and read its OpenAI model catalog."""
+    hello = _magpie_get_json("/api/hello")
+    if hello.get("name") != "magpie":
+        raise RuntimeError("127.0.0.1:3425 上运行的服务不是 Magpie Gateway")
+    catalog = _magpie_get_json("/v1/models", include_app_key=True)
+    data = catalog.get("data")
+    if not isinstance(data, list):
+        raise RuntimeError("Magpie 没有返回 OpenAI 兼容的 models 列表")
+    models = sorted({
+        item["id"].strip()
+        for item in data
+        if isinstance(item, dict)
+        and isinstance(item.get("id"), str)
+        and _MODEL_RE.fullmatch(item["id"].strip())
+    })[:100]
+    if not models:
+        raise RuntimeError("Magpie Gateway 已找到，但没有发现可用模型")
+    return {
+        "id": "magpie",
+        "name": "Magpie Gateway",
+        "base_url": "http://127.0.0.1:3425/v1",
+        "models": models,
+        "default_model": models[0],
+        "gateway_version": str(hello.get("version") or "unknown")[:80],
+    }
+
 def resolve_provider(provider_id, model):
     provider = get_provider(provider_id or "zhipu")
     if provider is None or not provider["enabled"]:
@@ -443,14 +514,16 @@ input:focus,textarea:focus,select:focus{border-color:var(--p-accent)}
   <div class="hint" style="margin-top:9px">协议：OpenAI Chat Completions（/chat/completions + /models）。只支持标准 Bearer Key；如服务商要求特殊签名或私有协议，暂不能直接接入。</div>
   <div class="actions">
    <button class="primary-btn" id="save" type="submit">保存供应商</button>
+   <button class="quiet-btn" id="detectMagpie" type="button">检测本机 Magpie</button>
    <button class="quiet-btn" id="refreshModels" type="button">从 /models 发现模型</button>
    <button class="quiet-btn" id="reset" type="button">清空表单</button>
   </div>
   <div class="status" id="status" role="status"></div>
  </form>
  <div class="callout">
-  <b>浏览器登录与 Magpie</b><br>
-  DSH 可以连接你自己运行的 Magpie Gateway，但不会读取 Magpie/Qoder 的登录 Cookie。先在 Magpie 里完成官方/插件登录，再把 Gateway 地址和 Gateway Key 填入上方。默认本机地址 <code>http://127.0.0.1:3425/v1</code> 只适用于 Magpie 与 DSH 运行在同一设备/网络命名空间。<br>
+  <b>Magpie 本机网关</b><br>
+  先在 Magpie 中通过浏览器完成订阅登录，并保持 Magpie Gateway 运行。点击「检测本机 Magpie」即可自动读取 <code>127.0.0.1:3425</code> 的网关标识和模型目录，再保存供应商。检测仅访问本机固定端点，不读取账号 Cookie、Magpie 配置文件或其他凭据。<br>
+  Android ARM64 终端版本可从 <a href="https://github.com/yetone/magpie-releases/releases/latest" target="_blank" rel="noopener noreferrer">Magpie 官方 Releases</a> 获取。<br>
   <a href="https://usemagpie.ai/docs/start" target="_blank" rel="noopener noreferrer">Magpie 官方说明 ↗</a> ·
   <a href="https://docs.qoder.com/cli/authentication" target="_blank" rel="noopener noreferrer">Qoder CLI 登录文档 ↗</a> ·
   <a href="https://docs.qoder.com/qoder/custom-models" target="_blank" rel="noopener noreferrer">Qoder BYOK 文档 ↗</a>
@@ -571,6 +644,23 @@ input:focus,textarea:focus,select:focus{border-color:var(--p-accent)}
   if(!currentEditId){status("请先保存供应商和密钥，再发现模型。","error");return;}
   testProvider(currentEditId);
  };
+ $("detectMagpie").onclick=function(){
+  status("正在检测本机 Magpie Gateway（127.0.0.1:3425）…");
+  fetch("/api/providers/detect-magpie",{method:"POST"})
+   .then(function(r){return r.json().then(function(j){if(!r.ok||j.code!==0)throw new Error(j.message||"未发现 Magpie");return j;});})
+   .then(function(j){
+    var p=j.item;
+    currentEditId=providerRows.some(function(x){return x.id==="magpie";})?"magpie":null;
+    $("pid").value=p.id;$("pid").disabled=!!currentEditId;
+    $("pname").value=p.name;$("base").value=p.base_url;
+    $("models").value=p.models.join("\\n");$("defaultModel").value=p.default_model;
+    $("apiKey").value="magpie-dsh017";
+    $("formTitle").textContent=currentEditId?"更新本机 Magpie":"添加本机 Magpie";
+    $("save").textContent="保存 Magpie 接入";
+    status("已识别 Magpie "+p.gateway_version+"，发现 "+p.models.length+" 个模型。检查模型列表后保存即可连接。","ok");
+   })
+   .catch(function(e){status("未能连接本机 Magpie："+e.message,"error");});
+ };
  load();
 })();
 </script></body></html>'''
@@ -593,6 +683,18 @@ def api_providers():
     return jsonify({"code": 0, "item": {
         **item, "secret_configured": bool(get_provider_secret(item["id"]))
     }}), 201
+
+
+@provider_bp.route("/api/providers/detect-magpie", methods=["POST"])
+def api_detect_magpie():
+    try:
+        item = discover_local_magpie()
+        return jsonify({"code": 0, "item": item})
+    except Exception as error:
+        return jsonify({
+            "code": -1,
+            "message": str(error)[:300],
+        }), 502
 
 
 @provider_bp.route("/api/providers/<provider_id>", methods=["PUT", "DELETE"])
