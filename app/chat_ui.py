@@ -11,6 +11,9 @@ from app.bili_client import client
 
 chat_ui_bp = Blueprint('chat_ui', __name__)
 
+_MAX_CHAT_MESSAGES = 100
+_MAX_CHAT_CHARS = 200_000
+
 # 模型白名单 + payload 辅助（/api/chat 依赖）
 MODEL_MAP = {
     "glm-4.7-flash": "glm-4.7-flash",
@@ -20,12 +23,36 @@ MODEL_MAP = {
 def api_chat():
     try:
         body = request.get_json(force=True, silent=True) or {}
-        messages = body.get("messages") or []
-        system = body.get("system")
-        workspace = body.get("workspace")  # {file_id, name, content, version}
-        open_file_id = body.get("open_file_id")  # 当前窗格里打开的文件 ID
+        if not isinstance(body, dict):
+            return jsonify({"code": -1, "message": "请求必须是 JSON 对象"}), 400
+
+        messages = body.get("messages")
+        if not isinstance(messages, list):
+            return jsonify({"code": -1, "message": "messages 必须是数组"}), 400
         if not messages:
             return jsonify({"code": -1, "message": "messages 为空"})
+        if len(messages) > _MAX_CHAT_MESSAGES:
+            return jsonify({"code": -1, "message": "单次聊天最多允许100条消息"}), 413
+        if any(not isinstance(message, dict) for message in messages):
+            return jsonify({"code": -1, "message": "每条 message 必须是对象"}), 400
+
+        system = body.get("system")
+        if system is not None and not isinstance(system, str):
+            return jsonify({"code": -1, "message": "system 必须是字符串"}), 400
+        workspace = body.get("workspace")  # {file_id, name, content, version}
+        open_file_id = body.get("open_file_id")  # 当前窗格里打开的文件 ID
+        if workspace is not None and not isinstance(workspace, dict):
+            return jsonify({"code": -1, "message": "workspace 必须是对象"}), 400
+        if isinstance(workspace, dict) and not isinstance(workspace.get("content", ""), str):
+            return jsonify({"code": -1, "message": "workspace.content 必须是字符串"}), 400
+
+        payload_chars = len(json.dumps(messages, ensure_ascii=False, separators=(",", ":")))
+        payload_chars += len(system or "")
+        if isinstance(workspace, dict):
+            payload_chars += len(json.dumps(workspace, ensure_ascii=False, separators=(",", ":")))
+        if payload_chars > _MAX_CHAT_CHARS:
+            return jsonify({"code": -1, "message": "聊天上下文超过200000字符限制"}), 413
+
         # 如果有 workspace 上下文，拼到 system 里
         if workspace and isinstance(workspace, dict):
             ws_sys = (
