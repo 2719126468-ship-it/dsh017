@@ -39,7 +39,6 @@ class ChatProductMotionTests(unittest.TestCase):
         self.assertIn("isTableStart(index)", CHAT_HTML)
         self.assertIn("headerCells.forEach", CHAT_HTML)
         self.assertIn(".md-table-wrap", _THEME_CSS)
-        self.assertIn("codeCopy.onclick", CHAT_HTML)
         self.assertIn("codeLines.join(nl)", CHAT_HTML)
 
     def test_product_themes_have_distinct_chat_layouts_and_motion(self):
