@@ -1391,6 +1391,7 @@ html[data-theme="dark"] .canvas-pane{
     var fullText = '';
     var thinkShown = false;
     var streamState = {textNode:null, pending:'', queued:false};
+    var streamCompleted = false;
 
     try{
       var resp = await fetch('/api/chat', {
@@ -1499,6 +1500,7 @@ html[data-theme="dark"] .canvas-pane{
       }
 
       if(streamState.queued) flushStreamText(streamState);
+      streamCompleted = true;
       if(typing.parentNode) typing.remove();
 
       if(assistantRow){
@@ -1526,13 +1528,14 @@ html[data-theme="dark"] .canvas-pane{
       errBody.textContent = '连接失败: ' + e.message;
       errRow.appendChild(errBody);
       msgs.appendChild(errRow);
+      if(chatAnnouncer) chatAnnouncer.textContent = '回复生成失败';
       scrollBottom();
     }finally{
       busy = false;
       sendBtn.disabled = false;
       composer.classList.remove('is-streaming');
       composer.removeAttribute('aria-busy');
-      if(chatAnnouncer) chatAnnouncer.textContent = '回复生成完成';
+      if(streamCompleted && chatAnnouncer) chatAnnouncer.textContent = '回复生成完成';
       if(mobileRefocusAfterStream) input.focus();
     }
   }
