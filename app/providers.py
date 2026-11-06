@@ -380,7 +380,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--p-accent)}
 .status.error{color:var(--p-bad)}.status.ok{color:var(--p-good)}
 .preset-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:12px 0}
 .preset{border:1px solid var(--p-line);border-radius:11px;padding:9px;background:var(--p-panel2);
- text-align:left;color:var(--p-text);font:11px/1.4 inherit;cursor:pointer}
+ text-align:left;color:var(--p-text);font-family:inherit;font-size:11px;line-height:1.4;cursor:pointer}
 .preset small{display:block;color:var(--p-muted);font-size:9px;margin-top:3px}
 .callout{padding:12px;border:1px dashed var(--p-line);border-radius:12px;color:var(--p-muted);
  font-size:10px;line-height:1.65;margin-top:13px}
