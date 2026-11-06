@@ -1547,7 +1547,7 @@ html[data-theme="dark"] .canvas-pane{
           break;
         }
         buffer += decoder.decode(r.value, {stream:true});
-        var lines = buffer.split('\\n');
+        var lines = buffer.split('\n');
         buffer = lines.pop();
         for(var i=0; i<lines.length; i++) handleStreamLine(lines[i]);
       }
