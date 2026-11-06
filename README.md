@@ -1,5 +1,7 @@
 # DSH-017 · 点读笔个人门户
 
+> 项目总体战略、八大产品域、年度路线图、Issue 任务树与发布门槛：[`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md)。
+
 在破解点读笔（Android 8.1 / armv7 / 双核）上，通过 Termux + proot-distro Ubuntu
 容器运行的个人门户服务。
 
