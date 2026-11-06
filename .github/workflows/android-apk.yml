@@ -1,0 +1,75 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.artifact }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: arm32
+            python: "3.11"
+            artifact: ARMv7-32bit
+          - flavor: arm64
+            python: "3.12"
+            artifact: ARM64-64bit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up matching Python for Chaquopy
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Build APK
+        run: gradle -p android-app assemble${{ matrix.flavor == 'arm32' && 'Arm32' || 'Arm64' }}Debug --stacktrace
+
+      - name: Stage APK
+        run: |
+          mkdir -p dist
+          cp "android-app/app/build/outputs/apk/${{ matrix.flavor }}/debug/app-${{ matrix.flavor }}-debug.apk" \
+             "dist/DSH017-${{ matrix.artifact }}.apk"
+          sha256sum dist/*.apk
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSH017-${{ matrix.artifact }}
+          path: dist/DSH017-${{ matrix.artifact }}.apk
+          if-no-files-found: error
+          retention-days: 30
