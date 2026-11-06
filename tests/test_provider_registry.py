@@ -17,7 +17,7 @@ class ProviderRegistryTests(unittest.TestCase):
         self.secrets_patch = patch.object(providers, "_SECRETS_PATH", self.secrets_path)
         self.config_patch.start()
         self.secrets_patch.start()
-        self.url_validation_patch = patch.object(providers, "validate_provider_url", return_value=True)
+        self.url_validation_patch = patch.object(providers, "validate_provider_url_syntax", return_value=True)
         self.url_validation_patch.start()
         self.runtime_before = dict(providers._RUNTIME_SECRETS)
         providers._RUNTIME_SECRETS.clear()
