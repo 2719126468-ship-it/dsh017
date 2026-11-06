@@ -2015,6 +2015,7 @@ html[data-theme="dark"] .canvas-pane{
         var bodyEl2 = assistantRow.querySelector('.msg-body');
         renderAssistantMarkdown(bodyEl2, fullText);
         history.push({role:'assistant', content: fullText, fresh: true});
+        await persistConversation();
         var idx = history.length - 1;
         assistantRow.dataset.idx = idx;
         attachAssistantActions(assistantRow, fullText, idx);
@@ -2039,6 +2040,7 @@ html[data-theme="dark"] .canvas-pane{
           var stoppedBody = assistantRow.querySelector('.msg-body');
           if(stoppedBody) renderAssistantMarkdown(stoppedBody, fullText);
           history.push({role:'assistant', content: fullText, fresh:true});
+          await persistConversation();
           var stoppedIdx = history.length - 1;
           assistantRow.dataset.idx = stoppedIdx;
           var stopNote = document.createElement('div');
@@ -2143,6 +2145,7 @@ html[data-theme="dark"] .canvas-pane{
     renderAll();
     autoFollow = true;
     scrollBottom(true);
+    await persistConversation();
     await requestStream();
   }
 
@@ -2156,6 +2159,7 @@ html[data-theme="dark"] .canvas-pane{
     // 截断到该 user
     history = history.slice(0, userIdx + 1);
     renderAll();
+    await persistConversation();
     await requestStream();
   }
 
@@ -2164,13 +2168,17 @@ html[data-theme="dark"] .canvas-pane{
     history[userIdx] = {role:'user', content:newText};
     history = history.slice(0, userIdx + 1);
     renderAll();
+    await persistConversation();
     await requestStream();
   }
 
   function newChat(){
     if(busy) return;
     history = [];
+    currentConversationId = null;
+    storeActiveConversationId(null);
     renderAll();
+    loadConversationList();
     input.value = '';
     input.style.height = '44px';
     if(window.innerWidth > 768) input.focus();
@@ -2190,8 +2198,17 @@ html[data-theme="dark"] .canvas-pane{
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
   };
 
-  // 初始渲染
+  // 初始渲染并恢复上次打开的会话
   renderAll();
+  loadConversationList().then(function(items){
+    var savedId = null;
+    try { savedId = localStorage.getItem('dsh017_active_conversation'); } catch(storageError) {}
+    if(savedId && items.some(function(item){ return item.id === savedId; })) {
+      openConversation(savedId);
+    } else if(savedId) {
+      storeActiveConversationId(null);
+    }
+  });
 })();
 </script>
 
