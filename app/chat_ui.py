@@ -88,10 +88,11 @@ def api_chat():
     except (ValueError, TypeError) as error:
         return jsonify({"code": -1, "message": str(error)}), 400
     headers = {
-        "Authorization": "Bearer " + provider_key,
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
     }
+    if provider_key:
+        headers["Authorization"] = "Bearer " + provider_key
     # Only GLM exposes Z.ai's vendor-specific thinking switches.
     effort = body.get("effort") or "auto"
     last_err = None
