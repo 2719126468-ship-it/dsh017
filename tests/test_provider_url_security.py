@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from app.security import validate_provider_url
+from app.provider_transport import validate_provider_url_syntax
 
 
 class ProviderUrlSecurityTests(unittest.TestCase):
@@ -50,6 +51,16 @@ class ProviderUrlSecurityTests(unittest.TestCase):
     def test_private_ip_literal_is_rejected(self):
         self.assertFalse(validate_provider_url("https://10.0.0.8/v1"))
         self.assertFalse(validate_provider_url("https://[fd00::1]/v1"))
+
+    def test_saved_remote_provider_syntax_does_not_require_live_dns(self):
+        with patch("app.provider_transport.socket.getaddrinfo", side_effect=OSError("offline")):
+            self.assertTrue(validate_provider_url_syntax("https://api.example.test/v1"))
+            self.assertFalse(validate_provider_url("https://api.example.test/v1"))
+
+    def test_private_https_ip_literal_is_rejected_at_configuration_time(self):
+        self.assertFalse(validate_provider_url_syntax("https://127.0.0.1/v1"))
+        self.assertFalse(validate_provider_url_syntax("https://10.0.0.8/v1"))
+        self.assertTrue(validate_provider_url_syntax("https://8.8.8.8/v1"))
 
 
 if __name__ == "__main__":
