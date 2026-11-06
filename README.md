@@ -13,6 +13,10 @@
 - **塔罗 3D 翻牌**：22 张大阿卡纳 + 正逆位
 - **统一控制台**：5 卡片 + 30s 健康检查
 
+## Android 独立 APK
+
+`android-app/` 提供内置 WebView + 嵌入式 Python/Flask 后端的 APK 构建。支持 Android 8.1（API 27）及以上，分别产出 ARMv7 32 位和 ARM64 64 位安装包；不需要 Termux/proot。首次启动会在应用私有目录初始化 SQLite 和服务，AI 功能需在应用右上角配置自己的智谱 API Key。细节、网络兼容差异与构建步骤见 [`android-app/README.md`](android-app/README.md)。GitHub Actions 会分别构建两个架构的 APK。
+
 ## 环境
 
 - 设备：破解点读笔，Android 8.1，armv7，双核
