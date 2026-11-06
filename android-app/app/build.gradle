@@ -1,0 +1,82 @@
+plugins {
+    id "com.android.application"
+    id "com.chaquo.python"
+}
+
+android {
+    namespace "com.dsh017.android"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.dsh017.android"
+        minSdk 27
+        targetSdk 35
+        versionCode 1
+        versionName "0.1.0"
+    }
+
+    flavorDimensions "abi"
+    productFlavors {
+        arm32 {
+            dimension "abi"
+            ndk { abiFilters "armeabi-v7a" }
+        }
+        arm64 {
+            dimension "abi"
+            ndk { abiFilters "arm64-v8a" }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+    }
+}
+
+chaquopy {
+    productFlavors {
+        arm32 {
+            version = "3.11"
+            pip {
+                install("Flask==3.1.2")
+                install("waitress==3.0.2")
+                install("requests==2.32.5")
+            }
+        }
+        arm64 {
+            version = "3.12"
+            pip {
+                options("--extra-index-url", "https://pypi.flet.dev")
+                install("Flask==3.1.2")
+                install("waitress==3.0.2")
+                install("requests==2.32.5")
+                install("curl_cffi==0.16.2")
+            }
+        }
+    }
+    sourceSets {
+        main {
+            srcDir("$buildDir/generated/dshPython")
+        }
+    }
+}
+
+tasks.register("stageDshPython", Copy) {
+    from(rootProject.file("../app")) { into("app") }
+    from(rootProject.file("../bili_console.py"))
+    from(rootProject.file("../hub_server.py"))
+    from(rootProject.file("../novel_server.py"))
+    from(rootProject.file("../tarot_server.py"))
+    from(rootProject.file("app/src/main/python/android_entry.py"))
+    into("$buildDir/generated/dshPython")
+}
+tasks.named("preBuild").configure {
+    dependsOn("stageDshPython")
+}
