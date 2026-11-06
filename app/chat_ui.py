@@ -1451,96 +1451,107 @@ html[data-theme="dark"] .canvas-pane{
       var decoder = new TextDecoder();
       var buffer = '';
 
-      while(true){
-        var r = await reader.read();
-        if(r.done) break;
-        buffer += decoder.decode(r.value, {stream:true});
-        var lines = buffer.split('\n');
-        buffer = lines.pop();
+      function handleStreamLine(rawLine) {
+        var line = String(rawLine || '').trim();
+        if(!line || line.indexOf('data:') !== 0) return;
+        var payload = line.slice(5).replace(/^ /, '');
+        if(!payload || payload === '[DONE]') return;
 
-        for(var i=0; i<lines.length; i++){
-          var line = lines[i].trim();
-          if(!line || line.indexOf('data: ') !== 0) continue;
-          var payload = line.slice(6);
-          if(payload === '[DONE]') continue;
-          try{
-            var j = JSON.parse(payload);
-            if(j.error) throw new Error(typeof j.error === 'string' ? j.error : JSON.stringify(j.error));
-            if(j.info) {
-              typing.setAttribute('aria-label', j.info);
-              continue;
-            }
-            if((j.type === 'artifact_card' || j.type === 'pane_update') && j.data){
-              handleArtifact(j.type, j.data);
-              continue;
-            }
-            if(j.type === 'workspace_edit' && j.data){
-              handleArtifact('artifact_card', j.data);
-              continue;
-            }
-            if(j.type === 'error'){
-              console.warn('workspace error:', j.message);
-              continue;
-            }
-            var delta = j.choices && j.choices[0] && j.choices[0].delta;
-            if(delta && delta.reasoning_content){
-              if(!thinkShown && !assistantRow){
-                thinkShown = true;
-                typing.innerHTML = '';
-                var tp = document.createElement('div');
-                tp.className = 'think-panel';
-                tp.innerHTML = '<div class="think-head"><span class="arrow">▸</span>思考中 <span class="tlen">(0 字)</span></div><div class="think-body"></div>';
-                typing.appendChild(tp);
-                tp.querySelector('.think-head').onclick = function(){
-                  var isOpen = tp.classList.contains('open');
-                  tp.classList.toggle('open', !isOpen);
-                  tp.classList.toggle('collapsed', isOpen);
-                };
-                window._thinkText = '';
-                window._thinkBody = tp.querySelector('.think-body');
-                window._thinkLen = tp.querySelector('.tlen');
-              }
-              if(window._thinkBody){
-                window._thinkText += delta.reasoning_content;
-                window._thinkBody.textContent = window._thinkText;
-                window._thinkLen.textContent = '(' + window._thinkText.length + ' 字)';
-                if(autoFollow) scrollBottom();
-              }
-            }
-            if(delta && delta.content){
-              if(!assistantRow){
-                var tpEl = typing.querySelector('.think-panel');
-                if(tpEl){
-                  tpEl.classList.add('collapsed');
-                  var head = tpEl.querySelector('.think-head');
-                  if(head) head.innerHTML = '<span class="arrow">▸</span>思考过程 · 点击展开';
-                  msgs.insertBefore(tpEl, typing);
-                }
-                if(typing.parentNode) typing.remove();
-                window._thinkBody = null;
-                window._thinkLen = null;
+        var j;
+        try {
+          j = JSON.parse(payload);
+        } catch(parseError) {
+          return;
+        }
+        if(!j || typeof j !== 'object') return;
+        if(j.error) {
+          throw new Error(typeof j.error === 'string' ? j.error : JSON.stringify(j.error));
+        }
+        if(j.info) {
+          typing.setAttribute('aria-label', j.info);
+          return;
+        }
+        if((j.type === 'artifact_card' || j.type === 'pane_update') && j.data) {
+          handleArtifact(j.type, j.data);
+          return;
+        }
+        if(j.type === 'workspace_edit' && j.data) {
+          handleArtifact('artifact_card', j.data);
+          return;
+        }
+        if(j.type === 'error') {
+          var message = typeof j.message === 'string' && j.message ? j.message : '服务端处理失败';
+          throw new Error(message);
+        }
 
-                assistantRow = document.createElement('div');
-                assistantRow.className = 'msg-row assistant';
-                var body = document.createElement('div');
-                body.className = 'msg-body streaming-text';
-                streamState.textNode = document.createTextNode('');
-                body.appendChild(streamState.textNode);
-                var cursor = document.createElement('span');
-                cursor.className = 'cursor';
-                cursor.setAttribute('aria-hidden', 'true');
-                body.appendChild(cursor);
-                assistantRow.appendChild(body);
-                msgs.appendChild(assistantRow);
-              }
-              fullText += delta.content;
-              queueStreamText(streamState, delta.content);
-            }
-          }catch(pe){
-            if(pe.message && pe.message.indexOf('error') !== -1) throw pe;
+        var delta = j.choices && j.choices[0] && j.choices[0].delta;
+        if(delta && delta.reasoning_content) {
+          if(!thinkShown && !assistantRow) {
+            thinkShown = true;
+            typing.innerHTML = '';
+            var tp = document.createElement('div');
+            tp.className = 'think-panel';
+            tp.innerHTML = '<div class="think-head"><span class="arrow">▸</span>思考中 <span class="tlen">(0 字)</span></div><div class="think-body"></div>';
+            typing.appendChild(tp);
+            tp.querySelector('.think-head').onclick = function() {
+              var isOpen = tp.classList.contains('open');
+              tp.classList.toggle('open', !isOpen);
+              tp.classList.toggle('collapsed', isOpen);
+            };
+            window._thinkText = '';
+            window._thinkBody = tp.querySelector('.think-body');
+            window._thinkLen = tp.querySelector('.tlen');
+          }
+          if(window._thinkBody) {
+            window._thinkText += delta.reasoning_content;
+            window._thinkBody.textContent = window._thinkText;
+            window._thinkLen.textContent = '(' + window._thinkText.length + ' 字)';
+            if(autoFollow) scrollBottom();
           }
         }
+        if(delta && delta.content) {
+          if(!assistantRow) {
+            var tpEl = typing.querySelector('.think-panel');
+            if(tpEl) {
+              tpEl.classList.add('collapsed');
+              var head = tpEl.querySelector('.think-head');
+              if(head) head.innerHTML = '<span class="arrow">▸</span>思考过程 · 点击展开';
+              msgs.insertBefore(tpEl, typing);
+            }
+            if(typing.parentNode) typing.remove();
+            window._thinkBody = null;
+            window._thinkLen = null;
+
+            assistantRow = document.createElement('div');
+            assistantRow.className = 'msg-row assistant';
+            var body = document.createElement('div');
+            body.className = 'msg-body streaming-text';
+            streamState.textNode = document.createTextNode('');
+            body.appendChild(streamState.textNode);
+            var cursor = document.createElement('span');
+            cursor.className = 'cursor';
+            cursor.setAttribute('aria-hidden', 'true');
+            body.appendChild(cursor);
+            assistantRow.appendChild(body);
+            msgs.appendChild(assistantRow);
+          }
+          fullText += delta.content;
+          queueStreamText(streamState, delta.content);
+        }
       }
+
+      while(true) {
+        var r = await reader.read();
+        if(r.done) {
+          buffer += decoder.decode();
+          break;
+        }
+        buffer += decoder.decode(r.value, {stream:true});
+        var lines = buffer.split('\\n');
+        buffer = lines.pop();
+        for(var i=0; i<lines.length; i++) handleStreamLine(lines[i]);
+      }
+      if(buffer) handleStreamLine(buffer);
 
       if(streamState.queued) flushStreamText(streamState);
       streamCompleted = true;
