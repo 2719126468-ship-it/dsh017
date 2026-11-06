@@ -35,6 +35,9 @@ app.register_blueprint(chat_ui_bp)
 from app.workspace_routes import workspace_bp
 app.register_blueprint(workspace_bp)
 
+from app.providers import provider_bp
+app.register_blueprint(provider_bp)
+
 from app.shorts_routes import shorts_bp
 
 def _lan_ip():
