@@ -18,6 +18,7 @@ def _lan_ip():
         return "0.0.0.0"
 
 from flask import Flask, request, jsonify, Response, render_template_string
+from app.security import validate_remote_url
 
 try:
     from curl_cffi import requests as http_requests
@@ -27,6 +28,10 @@ except ImportError:
     USE_CFFI = False
 
 app = Flask(__name__)
+from app.auth import install_auth
+_auth_info = install_auth(app)
+
+NOVEL_IMAGE_HOSTS = ("byteimg.com", "p6-tt.bytecdn.cn")
 from app.auth import install_auth
 _auth_info = install_auth(app)
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -477,15 +482,30 @@ def api_content():
 @app.route("/api/img")
 def api_img():
     u = request.args.get("u", "")
-    if not u.startswith("http"):
+    if not validate_remote_url(u, allowed_suffixes=NOVEL_IMAGE_HOSTS):
         return "", 400
     try:
-        r = client.s.get(u, headers={"User-Agent": UA, "Referer": "https://fanqienovel.com/"},
-                         timeout=15, stream=True)
+        r = client.s.get(
+            u,
+            headers={"User-Agent": UA, "Referer": "https://fanqienovel.com/"},
+            timeout=(5, 15),
+            stream=True,
+            allow_redirects=False,
+        )
+        # Do not follow redirects: the target could resolve to a private address
+        # even when the original CDN URL passed validation.
+        if 300 <= r.status_code < 400:
+            r.close()
+            return "", 502
+
         def gen():
-            for chunk in r.iter_content(chunk_size=32 * 1024):
-                if chunk:
-                    yield chunk
+            try:
+                for chunk in r.iter_content(chunk_size=32 * 1024):
+                    if chunk:
+                        yield chunk
+            finally:
+                r.close()
+
         resp = Response(gen(), status=r.status_code,
                         content_type=r.headers.get("Content-Type", "image/jpeg"))
         resp.headers["Cache-Control"] = "public, max-age=86400"
