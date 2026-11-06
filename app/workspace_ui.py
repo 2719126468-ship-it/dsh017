@@ -452,12 +452,14 @@ button{cursor:pointer}
   button.onclick=function(){
    var newText=edit.new_str||"",oldText=edit.old_str||"";
    var detail="旧内容：\n"+(oldText||"（新增）")+"\n\n新内容：\n"+newText;
-   if(!confirm(detail+"\n\n确认向服务端申请应用这次修改？"))return;
-   post("/api/workspace/apply_edit",Object.assign({},edit,{mode:$("aiPermission").value}))
+   var permission=$("aiPermission").value;
+   if(permission==="suggest"){alert("当前为“仅生成建议”模式。切换到“修改需要确认”并再次确认，才会写入文件。");return;}
+   if(!confirm(detail+"\n\n确认向服务端提交这次修改？"))return;
+   var endpoint=permission==="auto"?"/api/workspace/apply_edit":"/api/workspace/confirm_edit";
+   var payload=Object.assign({},edit,{mode:permission});
+   post(endpoint,payload)
     .then(function(j){
-     if(j.code===0&&j.auto_applied){openFile(edit.file_id);card.remove();}
-     else if(j.code===409){alert(j.message||"权限规则或模式要求确认。请检查文件权限策略。");}
-     else if(j.code===403){alert(j.message||"当前权限禁止修改。");}
+     if(j.code===0&&(j.auto_applied||j.confirmed_by_user)){openFile(edit.file_id);card.remove();}
     }).catch(function(e){alert(e.message);});
   };
   card.appendChild(title);card.appendChild(text);card.appendChild(button);$("aiMessages").appendChild(card);
@@ -488,7 +490,12 @@ button{cursor:pointer}
   fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
    .then(function(response){if(!response.ok)throw new Error("HTTP "+response.status);var reader=response.body.getReader(),decoder=new TextDecoder(),buffer="";
     function pump(){return reader.read().then(function(part){
-     if(part.done){aiBusy=false;$("aiSend").disabled=false;$("aiInput").disabled=false;aiHistory.push({role:"assistant",content:bubble.textContent});return;}
+     if(part.done){
+      var finalText=bubble.textContent;
+      bubble.innerHTML=markdown(finalText);
+      aiBusy=false;$("aiSend").disabled=false;$("aiInput").disabled=false;
+      aiHistory.push({role:"assistant",content:finalText});return;
+     }
      buffer+=decoder.decode(part.value,{stream:true});var split;
      while((split=buffer.indexOf("\n\n"))>=0){var event=buffer.slice(0,split);buffer=buffer.slice(split+2);parseEvent(event,bubble);}
      return pump();
