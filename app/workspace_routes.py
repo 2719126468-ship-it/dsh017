@@ -242,7 +242,7 @@ def api_ws_apply_edit():
     raw_mode = body.get("mode", "ask")
     if not isinstance(raw_mode, str):
         return jsonify({"code": -1, "message": "mode 必须是 ask、suggest 或 auto"}), 400
-    mode = raw_mode.strip()
+    mode = raw_mode
     if mode not in ("ask", "suggest", "auto"):
         return jsonify({"code": -1, "message": "mode 必须是 ask、suggest 或 auto"}), 400
     if file_id is None or base_version is None:
