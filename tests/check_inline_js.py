@@ -2,8 +2,12 @@
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from app.chat_ui import CHAT_HTML
 
@@ -11,7 +15,7 @@ node = shutil.which("node")
 if not node:
     raise SystemExit("Node.js is required for inline JavaScript syntax checks")
 
-shorts_source = Path("app/shorts_routes.py").read_text(encoding="utf-8")
+shorts_source = (ROOT / "app/shorts_routes.py").read_text(encoding="utf-8")
 shorts_match = re.search(r'SHORTS_HTML\s*=\s*r?""".*?<script>(.*?)</script>', shorts_source, re.S)
 if not shorts_match:
     raise SystemExit("Could not locate Shorts inline script")
