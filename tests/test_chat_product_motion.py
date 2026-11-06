@@ -106,7 +106,8 @@ class ChatProductMotionTests(unittest.TestCase):
     def test_theme_panel_is_accessible_and_uses_animated_open_state(self):
         self.assertIn('aria-hidden="true"', _THEME_WIDGET)
         self.assertIn('aria-expanded="false"', _THEME_WIDGET)
-        self.assertIn('panel.classList.toggle("open", open)', _THEME_WIDGET)
+        self.assertIn('panel.classList.toggle("open",open)', _THEME_WIDGET)
+        self.assertIn('function setPanelOpen(open,returnFocus)', _THEME_WIDGET)
         self.assertIn('panel.setAttribute("aria-hidden"', _THEME_WIDGET)
         self.assertIn('event.key === "Escape"', _THEME_WIDGET)
 
