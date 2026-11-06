@@ -886,8 +886,8 @@ html[data-theme="dark"] .canvas-pane{
       <div class="sb-label">模型</div>
       <div class="sb-select-wrap">
         <select id="modelSel">
-          <option value="glm-4.7-flash">GLM-4.7-Flash · 200K</option>
-          <option value="glm-4-flash">GLM-4-Flash · 128K</option>
+          <option value="zhipu::glm-4.7-flash">GLM-4.7-Flash · 200K</option>
+          <option value="zhipu::glm-4.6v-flash">GLM-4.6v-Flash</option>
         </select>
       </div>
       <div class="sb-label">思考强度</div>
@@ -911,6 +911,12 @@ html[data-theme="dark"] .canvas-pane{
       <div class="sb-label">导航</div>
       <button class="sb-item" id="sbPresets">
         <span class="icon">⚙</span><span class="label">预设管理</span>
+      </button>
+      <button class="sb-item" id="sbWorkspace">
+        <span class="icon">▤</span><span class="label">工作区</span>
+      </button>
+      <button class="sb-item" id="sbProviders">
+        <span class="icon">◈</span><span class="label">模型供应商</span>
       </button>
       <button class="sb-item" id="sbBili">
         <span class="icon">🎬</span><span class="label">返回 B 站</span>
@@ -953,8 +959,8 @@ html[data-theme="dark"] .canvas-pane{
     </div>
     <div class="composer-toolbar" id="composerToolbar">
       <select id="modelSelInline">
-        <option value="glm-4.7-flash">GLM-4.7-Flash</option>
-        <option value="glm-4-flash">GLM-4-Flash</option>
+        <option value="zhipu::glm-4.7-flash">GLM-4.7-Flash</option>
+        <option value="zhipu::glm-4.6v-flash">GLM-4.6v-Flash</option>
       </select>
       <select id="effortSelInline">
         <option value="auto">自动</option>
@@ -1065,6 +1071,8 @@ html[data-theme="dark"] .canvas-pane{
   document.getElementById('sbClose').onclick = closeSb;
   mask.onclick = closeSb;
   document.getElementById('sbPresets').onclick = function(){ location.href='/presets'; };
+  document.getElementById('sbWorkspace').onclick = function(){ location.href='/workspace'; };
+  document.getElementById('sbProviders').onclick = function(){ location.href='/providers'; };
   document.getElementById('sbBili').onclick = function(){ location.href='/'; };
   document.getElementById('sbShorts').onclick = function(){ location.href='/shorts'; };
   document.getElementById('sbFav').onclick = function(){ location.href='/fav'; };
@@ -1708,13 +1716,59 @@ html[data-theme="dark"] .canvas-pane{
   var modelSelInline = document.getElementById('modelSelInline');
   var effortSelInline = document.getElementById('effortSelInline');
   var composerToolbar = document.getElementById('composerToolbar');
+  var currentProviderId = 'zhipu';
   var currentModel = 'glm-4.7-flash';
   var currentEffort = 'auto';
 
-  modelSel.onchange = function(){ currentModel = modelSel.value; };
+  function applyModelChoice(value) {
+    var split = String(value || 'zhipu::glm-4.7-flash').split('::');
+    currentProviderId = split[0] || 'zhipu';
+    currentModel = split.slice(1).join('::') || 'glm-4.7-flash';
+    modelSel.value = value;
+    modelSelInline.value = value;
+  }
+  function loadProviderChoices() {
+    fetch('/api/providers', {cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+      if(j.code !== 0 || !Array.isArray(j.items)) return;
+      var options = [];
+      j.items.forEach(function(provider){
+        if(provider.enabled === false) return;
+        (provider.models || []).forEach(function(model){
+          options.push({
+            value:provider.id+'::'+model,
+            label:provider.name+' · '+model+(provider.secret_configured?'':' · 未设置密钥')
+          });
+        });
+      });
+      if(!options.length) return;
+      function fill(select) {
+        select.innerHTML='';
+        options.forEach(function(item){
+          var option=document.createElement('option');
+          option.value=item.value;
+          option.textContent=item.label;
+          select.appendChild(option);
+        });
+      }
+      var preferred='zhipu::glm-4.7-flash';
+      j.items.some(function(provider){
+        if(provider.id==='zhipu' && provider.default_model) {
+          preferred=provider.id+'::'+provider.default_model;
+          return true;
+        }
+        return false;
+      });
+      fill(modelSel);
+      fill(modelSelInline);
+      var choice=options.some(function(item){return item.value===preferred;})?preferred:options[0].value;
+      applyModelChoice(choice);
+    }).catch(function(){});
+  }
+  modelSel.onchange = function(){ applyModelChoice(modelSel.value); };
   effortSel.onchange = function(){ currentEffort = effortSel.value; };
-  modelSelInline.onchange = function(){ currentModel = modelSelInline.value; };
+  modelSelInline.onchange = function(){ applyModelChoice(modelSelInline.value); };
   effortSelInline.onchange = function(){ currentEffort = effortSelInline.value; };
+  loadProviderChoices();
 
   // 输入框聚焦/悬停时工具栏显形
   var composer = document.getElementById('composer');
@@ -1894,6 +1948,7 @@ html[data-theme="dark"] .canvas-pane{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({messages: history, system: currentSystem,
+                            provider_id: currentProviderId,
                             model: currentModel, effort: currentEffort,
                             workspace: window.wsContext || null,
                             open_file_id: (typeof WS !== 'undefined' ? WS.currentId : null)})
