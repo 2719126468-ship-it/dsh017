@@ -33,6 +33,17 @@ printf '%s\n' "$$" > "$PID_FILE"
 STOP_REQUESTED=0
 CHILD_PID=""
 
+process_is_running() {
+  local process_id="$1"
+  local state
+  kill -0 "$process_id" 2>/dev/null || return 1
+  state="$(ps -p "$process_id" -o stat= 2>/dev/null | tr -d '[:space:]' || true)"
+  case "$state" in
+    Z*|X*) return 1 ;;
+  esac
+  return 0
+}
+
 rotate_log() {
   local size
   [ -f "$LOG" ] || return 0
@@ -73,9 +84,13 @@ while [ "$STOP_REQUESTED" -eq 0 ]; do
   "$PYTHON_BIN" -u "$SCRIPT_DIR/bili_console.py" >> "$LOG" 2>&1 &
   CHILD_PID=$!
 
-  while kill -0 "$CHILD_PID" 2>/dev/null; do
-    sleep "$ROTATE_INTERVAL"
-    rotate_log
+  ROTATE_TICKS=0
+  while process_is_running "$CHILD_PID"; do
+    sleep 1
+    ROTATE_TICKS=$((ROTATE_TICKS + 1))
+    if [ "$((ROTATE_TICKS % ROTATE_INTERVAL))" -eq 0 ]; then
+      rotate_log
+    fi
     if [ "$STOP_REQUESTED" -eq 1 ]; then
       kill -TERM "$CHILD_PID" 2>/dev/null || true
     fi
