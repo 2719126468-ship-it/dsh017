@@ -65,6 +65,12 @@ class GlobalThemeSupportTests(unittest.TestCase):
         self.assertNotIn("<script>alert(1)</script>", body)
         self.assertIn('id="dsh017-theme-switcher"', body)
 
+    def test_api_html_payload_is_not_rewritten(self):
+        from flask import Response
+        # An API may proxy an upstream HTML payload; it must never receive our UI script.
+        response = self.client.get("/api")
+        self.assertNotIn("dsh017-theme-switcher", response.get_data(as_text=True))
+
     def test_non_html_response_is_not_modified_but_is_hardened(self):
         response = self.client.get("/api")
         body = response.get_data(as_text=True)
