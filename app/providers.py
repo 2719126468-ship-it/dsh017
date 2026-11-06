@@ -653,7 +653,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--p-accent)}
     currentEditId=providerRows.some(function(x){return x.id==="magpie";})?"magpie":null;
     $("pid").value=p.id;$("pid").disabled=!!currentEditId;
     $("pname").value=p.name;$("base").value=p.base_url;
-    $("models").value=p.models.join("\\n");$("defaultModel").value=p.default_model;
+    $("models").value=p.models.join("\n");$("defaultModel").value=p.default_model;
     $("apiKey").value="magpie-dsh017";
     $("formTitle").textContent=currentEditId?"更新本机 Magpie":"添加本机 Magpie";
     $("save").textContent="保存 Magpie 接入";
