@@ -2485,7 +2485,15 @@ html[data-theme="dark"] .canvas-pane{
     var btn = document.getElementById('diffApply');
     btn.textContent = '应用中…';
     btn.disabled = true;
-    fetch('/api/workspace/apply_edit', {
+    if(currentPermMode === 'ask' &&
+       !window.confirm('确认将 AI 建议写入当前文件？系统会检查版本并保留修改前后的快照。')) {
+      btn.textContent = '应用';
+      btn.disabled = false;
+      return;
+    }
+    var approvalEndpoint = currentPermMode === 'ask'
+      ? '/api/workspace/confirm_edit' : '/api/workspace/apply_edit';
+    fetch(approvalEndpoint, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(Object.assign({}, edit, {mode: currentPermMode}))
