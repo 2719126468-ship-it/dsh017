@@ -55,6 +55,8 @@ class ChatProductMotionTests(unittest.TestCase):
     def test_canvas_pane_uses_transitionable_closed_and_open_states(self):
         self.assertIn(".canvas-pane{display:flex;flex:0 0 0;width:0", CHAT_HTML)
         self.assertIn("transition:width var(--dur-panel)", CHAT_HTML)
+        self.assertIn("visibility:hidden", CHAT_HTML)
+        self.assertIn("visibility:visible", CHAT_HTML)
         self.assertIn(".canvas-pane.open{flex:0 0 clamp(300px,42%,620px)", CHAT_HTML)
         self.assertIn("@media (max-width:1024px)", CHAT_HTML)
         self.assertIn(".canvas-pane.open{flex:1 1 100%;width:100%;height:100%", CHAT_HTML)
