@@ -74,6 +74,8 @@ nohup ./run_sidecars.sh > "$DSH017_DATA_DIR/logs/sidecars-supervisor.out" 2>&1 &
 
 四个 Web 服务统一添加 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 与收紧的 `Permissions-Policy` 浏览器响应头；目前未引入会破坏现有内联页面脚本的严格 CSP。
 
+B 站与小说的封面代理只返回 JPEG/PNG/WebP/GIF/AVIF 图片类型，声明体积超过 5 MiB 的响应会被拒绝；未知长度的流也会被限制在 5 MiB 内，且不跟随上游重定向。工作区 AI 自动应用必须使用管理员 Token 和明确的 `mode=auto`；未知模式或字段类型错误会在访问数据库前拒绝。
+
 ### 小说搜索代理与隐私
 
 `8091` 的小说搜索默认只请求番茄官方 HTTPS 搜索端点。旧版本内置的两个社区代理使用明文 HTTP（`101.35.133.34:5000`、`112.126.27.62:6889`），代理运营方及传输链路可能看到搜索关键词，因此默认不再调用。
