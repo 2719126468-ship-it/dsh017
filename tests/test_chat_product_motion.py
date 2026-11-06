@@ -27,7 +27,11 @@ class ChatProductMotionTests(unittest.TestCase):
         self.assertIn("node.textContent = token.slice", CHAT_HTML)
         self.assertIn("node.rel = 'noopener noreferrer'", CHAT_HTML)
         self.assertIn("renderAssistantMarkdown(bodyEl2, fullText)", CHAT_HTML)
-        self.assertIn("codeCopy.onclick = function()", CHAT_HTML)
+        self.assertIn("copyButton.onclick = function()", CHAT_HTML)
+        self.assertIn("(codeCopy, codeLines.join(nl))", CHAT_HTML)
+        self.assertIn("tableSeparatorPattern", CHAT_HTML)
+        self.assertIn("className = 'md-table'", CHAT_HTML)
+        self.assertIn(".md-table-wrap", _THEME_CSS)
 
     def test_product_themes_have_distinct_chat_layouts_and_motion(self):
         self.assertIn('html[data-dsh-theme="claude"] .msg-row.assistant .msg-body', _THEME_CSS)
