@@ -29,7 +29,7 @@ jobs:
             artifact: ARMv7-32bit
           - flavor: arm64
             task: assembleArm64Debug
-            python: "3.12"
+            python: "3.13"
             artifact: ARM64-64bit
 
     steps:
@@ -48,10 +48,12 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - name: Install Android platform
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        run: yes | sdkmanager --licenses && sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
