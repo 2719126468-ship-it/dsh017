@@ -17,13 +17,22 @@ class ChatProductMotionTests(unittest.TestCase):
         self.assertIn("scrollBottom(force)", CHAT_HTML)
         self.assertIn("autoFollow = true", CHAT_HTML)
 
-    def test_streaming_uses_a_stable_text_node_and_animation_frame_batching(self):
-        self.assertIn("document.createTextNode('')", CHAT_HTML)
+    def test_streaming_batches_chunks_and_renders_markdown_blocks_incrementally(self):
         self.assertIn("function queueStreamText(state, chunk)", CHAT_HTML)
         self.assertIn("requestAnimationFrame(function(){ flushStreamText(state); })", CHAT_HTML)
+        self.assertIn("function updateStreamPreview(state)", CHAT_HTML)
+        self.assertIn("function processStreamLine(state, line)", CHAT_HTML)
+        self.assertIn("function createStreamCodeBlock(state, language)", CHAT_HTML)
+        self.assertIn("function createStreamTable(state, headerLine)", CHAT_HTML)
+        self.assertIn("function appendStreamTableRow(state, line, header)", CHAT_HTML)
+        self.assertIn("state.codeTextNode.nodeValue = state.codeCommitted + state.buffer", CHAT_HTML)
+        self.assertIn("state.tableCandidate = line", CHAT_HTML)
+        self.assertIn("function finalizeStreamMarkdown(state)", CHAT_HTML)
+        self.assertIn("finalizeStreamMarkdown(streamState)", CHAT_HTML)
         self.assertNotIn("bodyEl.innerHTML = ''", CHAT_HTML)
         self.assertIn("composer.classList.add('is-streaming')", CHAT_HTML)
         self.assertIn("composer.classList.remove('is-streaming')", CHAT_HTML)
+        self.assertIn("code.appendChild(state.codeTextNode)", CHAT_HTML)
 
     def test_completed_assistant_messages_use_safe_dom_markdown_renderer(self):
         self.assertIn("function renderAssistantMarkdown(target, source)", CHAT_HTML)
