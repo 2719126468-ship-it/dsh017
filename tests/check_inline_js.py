@@ -17,21 +17,15 @@ if not node:
 
 shorts_source = (ROOT / "app/shorts_routes.py").read_text(encoding="utf-8")
 shorts_match = re.search(
-    r'SHORTS_HTML\\s*=\\s*r?""" .*?<script>(.*?)</script>',
+    r'SHORTS_HTML\s*=\s*r?""".*?<script>(.*?)</script>',
     shorts_source,
-    re.S | re.X,
+    re.S,
 )
-if not shorts_match:
-    shorts_match = re.search(
-        r'SHORTS_HTML\\s*=\\s*r?""".*?<script>(.*?)</script>',
-        shorts_source,
-        re.S,
-    )
 if not shorts_match:
     raise SystemExit("Could not locate Shorts inline script")
 
 chat_scripts = re.findall(
-    r"<script(?:\\s[^>]*)?>(.*?)</script\\s*>",
+    r"<script(?:\s[^>]*)?>(.*?)</script\s*>",
     CHAT_HTML,
     re.S | re.I,
 )
