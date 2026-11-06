@@ -107,15 +107,15 @@ jobs:
       - name: Publish versioned release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.1
-          name: DSH017 Android v0.1.1
+          tag_name: v0.1.2
+          name: DSH017 Android v0.1.2
           target_commitish: ${{ github.sha }}
           draft: false
           prerelease: false
           make_latest: true
           fail_on_unmatched_files: true
           body: |
-            DSH017 standalone Android WebView app (v0.1.1).
+            DSH017 standalone Android WebView app (v0.1.2).
 
             - Android 8.1+ (API 27).
             - Install the ARM64 APK on 64-bit ARM devices.

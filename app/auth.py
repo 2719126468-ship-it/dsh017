@@ -153,6 +153,10 @@ def _extract_token(authorization: str | None) -> str | None:
 def _requires_admin(path: str, method: str, json_body: dict | None) -> bool:
     if (path, method) in _ADMIN_EXACT_PATHS:
         return True
+    if path == "/api/providers" and method == "POST":
+        return True
+    if path.startswith("/api/providers/") and method in {"PUT", "POST", "DELETE"}:
+        return True
     if path.startswith("/api/preset/") and method in {"POST", "DELETE"}:
         return True
     if path == "/api/workspace/apply_edit" and method == "POST":

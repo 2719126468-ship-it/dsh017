@@ -44,6 +44,18 @@ class AndroidPackagingContractTests(unittest.TestCase):
         self.assertIn('"AES/GCM/NoPadding"', store)
         self.assertIn("KeyGenParameterSpec", store)
 
+    def test_provider_credentials_use_keystore_and_are_loaded_by_embedded_runtime(self):
+        store = self.read("app/src/main/java/com/dsh017/android/ApiKeyStore.java")
+        activity = self.read("app/src/main/java/com/dsh017/android/MainActivity.java")
+        launcher = self.read("app/src/main/python/android_entry.py")
+        self.assertIn("readProviderKeysJson", store)
+        self.assertIn("saveProviderKey", store)
+        self.assertIn("JavascriptInterface", activity)
+        self.assertIn("ProviderKeyBridge", activity)
+        self.assertIn("provider_keys_json", launcher)
+        self.assertIn("set_runtime_provider_secret", launcher)
+        self.assertIn('page.startsWith("http://127.0.0.1:8092/providers")', activity)
+
     def test_ci_builds_both_installable_variants(self):
         workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
         self.assertIn("assembleArm32Debug", workflow)

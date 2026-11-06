@@ -5,6 +5,8 @@ import os
 import json
 import time
 import threading
+import re
+import uuid
 from flask import Blueprint, request, jsonify
 from app.db import (
     _DB_LOCK, _db_conn, _snapshot_file, _db_backup_once,
@@ -224,6 +226,85 @@ def api_ws_auto_status():
                     "downgraded": _AUTO_DOWNGRADED,
                     "threshold": _AUTO_BLOCK_THRESHOLD})
 
+@workspace_bp.route("/api/workspace/confirm_edit", methods=["POST"])
+def api_ws_confirm_edit():
+    """Apply one AI suggestion only after an explicit user confirmation.
+
+    This is a one-shot manual approval path: deny rules still win, current
+    versions and unique old_str are checked, and each change is snapshotted.
+    It does not grant standing automatic-write permission.
+    """
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"code": -1, "message": "请求参数必须是 JSON 对象"}), 400
+    file_id = body.get("file_id")
+    base_version = body.get("base_version")
+    old_str = body.get("old_str", "")
+    new_str = body.get("new_str", "")
+    if (
+        isinstance(file_id, bool) or not isinstance(file_id, int) or file_id <= 0
+        or isinstance(base_version, bool) or not isinstance(base_version, int) or base_version < 1
+        or not isinstance(old_str, str) or not isinstance(new_str, str)
+        or len(new_str) > 1_000_000
+    ):
+        return jsonify({"code": -1, "message": "文件 ID、版本或编辑内容格式无效"}), 400
+
+    with _DB_LOCK:
+        c = _db_conn()
+        row = c.execute(
+            "SELECT name,content,version,kind FROM workspace_files "
+            "WHERE id=? AND deleted_at IS NULL",
+            (file_id,),
+        ).fetchone()
+        if row is None or row["kind"] != "file":
+            c.close()
+            return jsonify({"code": -1, "message": "文件不存在"}), 404
+        if row["version"] != base_version:
+            current_version = row["version"]
+            c.close()
+            return jsonify({
+                "code": 409, "action": "ask", "reason": "version_conflict",
+                "message": "文件已被修改，请重新打开后再确认",
+                "current_version": current_version,
+            }), 409
+        if not _ws_scope_check(row["name"]):
+            c.close()
+            return jsonify({"code": 403, "message": "文件名不在允许的工作区范围内"}), 403
+        rule = _ws_rule_lookup(row["name"], "edit")
+        if rule == "deny":
+            c.close()
+            return jsonify({"code": 403, "message": "规则禁止修改该文件"}), 403
+
+        current_content = row["content"]
+        if old_str == "":
+            updated_content = new_str
+        else:
+            occurrences = current_content.count(old_str)
+            if occurrences != 1:
+                c.close()
+                return jsonify({
+                    "code": 409, "reason": "old_str_not_unique",
+                    "message": "待替换内容必须恰好出现一次；请刷新文件后重新生成建议",
+                }), 409
+            updated_content = current_content.replace(old_str, new_str, 1)
+
+        new_version = row["version"] + 1
+        now = int(time.time())
+        _snapshot_file(c, file_id, current_content, "ai_confirmed_before", row["version"])
+        c.execute(
+            "UPDATE workspace_files SET content=?,version=?,updated_at=? WHERE id=?",
+            (updated_content, new_version, now, file_id),
+        )
+        _snapshot_file(c, file_id, updated_content, "ai_confirmed", row["version"])
+        c.commit()
+        c.close()
+
+    return jsonify({
+        "code": 0, "version": new_version, "content": updated_content,
+        "confirmed_by_user": True,
+    })
+
+
 @workspace_bp.route("/api/workspace/apply_edit", methods=["POST"])
 def api_ws_apply_edit():
     body = request.get_json(force=True, silent=True)
@@ -343,72 +424,358 @@ def api_ws_apply_edit():
     return jsonify({"code": 0, "version": new_v, "content": new_content,
                     "auto_applied": True})
 
+_WS_PROJECT_ID_RE = re.compile(r"^(?:default|[0-9a-f]{32})$")
+
+@workspace_bp.route("/api/workspace/projects", methods=["GET", "POST"])
+def api_ws_projects():
+    if request.method == "GET":
+        with _DB_LOCK:
+            c = _db_conn()
+            rows = c.execute(
+                "SELECT p.id,p.name,p.description,p.created_at,p.updated_at,"
+                "(SELECT COUNT(*) FROM workspace_files f WHERE f.workspace_id=p.id "
+                "AND f.deleted_at IS NULL AND f.kind='file') AS file_count "
+                "FROM workspace_projects p ORDER BY p.updated_at DESC"
+            ).fetchall()
+            c.close()
+        return jsonify({"code": 0, "items": [dict(row) for row in rows]})
+
+    body = request.get_json(force=True, silent=True) or {}
+    name = body.get("name")
+    description = body.get("description", "")
+    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+        return jsonify({"code": -1, "message": "项目名称必填，最多80字符"}), 400
+    if not isinstance(description, str) or len(description) > 300:
+        return jsonify({"code": -1, "message": "项目描述最多300字符"}), 400
+    project_id = uuid.uuid4().hex
+    now = int(time.time())
+    with _DB_LOCK:
+        c = _db_conn()
+        c.execute(
+            "INSERT INTO workspace_projects(id,name,description,created_at,updated_at) "
+            "VALUES(?,?,?,?,?)",
+            (project_id, name.strip(), description.strip(), now, now),
+        )
+        c.commit()
+        c.close()
+    return jsonify({"code": 0, "item": {
+        "id": project_id, "name": name.strip(), "description": description.strip(),
+        "created_at": now, "updated_at": now, "file_count": 0,
+    }}), 201
+
+
+@workspace_bp.route("/api/workspace/projects/<project_id>", methods=["GET", "PUT", "DELETE"])
+def api_ws_project(project_id):
+    if not _WS_PROJECT_ID_RE.fullmatch(project_id or ""):
+        return jsonify({"code": -1, "message": "项目 ID 无效"}), 400
+    if request.method == "GET":
+        with _DB_LOCK:
+            c = _db_conn()
+            row = c.execute(
+                "SELECT id,name,description,created_at,updated_at "
+                "FROM workspace_projects WHERE id=?",
+                (project_id,),
+            ).fetchone()
+            c.close()
+        if row is None:
+            return jsonify({"code": -1, "message": "项目不存在"}), 404
+        return jsonify({"code": 0, "item": dict(row)})
+
+    if request.method == "DELETE":
+        if project_id == "default":
+            return jsonify({"code": -1, "message": "默认工作区不能删除"}), 400
+        now = int(time.time())
+        with _DB_LOCK:
+            c = _db_conn()
+            exists = c.execute("SELECT id FROM workspace_projects WHERE id=?", (project_id,)).fetchone()
+            if exists is None:
+                c.close()
+                return jsonify({"code": -1, "message": "项目不存在"}), 404
+            c.execute(
+                "UPDATE workspace_files SET deleted_at=? "
+                "WHERE workspace_id=? AND deleted_at IS NULL",
+                (now, project_id),
+            )
+            c.execute("DELETE FROM workspace_projects WHERE id=?", (project_id,))
+            c.commit()
+            c.close()
+        return jsonify({"code": 0})
+
+    body = request.get_json(force=True, silent=True) or {}
+    name = body.get("name")
+    description = body.get("description", "")
+    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+        return jsonify({"code": -1, "message": "项目名称必填，最多80字符"}), 400
+    if not isinstance(description, str) or len(description) > 300:
+        return jsonify({"code": -1, "message": "项目描述最多300字符"}), 400
+    now = int(time.time())
+    with _DB_LOCK:
+        c = _db_conn()
+        cur = c.execute(
+            "UPDATE workspace_projects SET name=?,description=?,updated_at=? WHERE id=?",
+            (name.strip(), description.strip(), now, project_id),
+        )
+        c.commit()
+        changed = cur.rowcount > 0
+        c.close()
+    if not changed:
+        return jsonify({"code": -1, "message": "项目不存在"}), 404
+    return jsonify({"code": 0, "item": {
+        "id": project_id, "name": name.strip(), "description": description.strip(),
+        "updated_at": now,
+    }})
+
+
 @workspace_bp.route("/api/workspace/files", methods=["GET", "POST"])
 def api_ws_files():
     if request.method == "POST":
         body = request.get_json(force=True, silent=True) or {}
-        name = (body.get("name") or "").strip()
-        if not name:
-            return jsonify({"code": -1, "message": "缺少文件名"})
+        name = body.get("name")
+        project_id = body.get("workspace_id", body.get("project_id", "default"))
+        parent_id = body.get("parent_id")
+        kind = body.get("kind", "file")
+        if not isinstance(name, str) or not _ws_scope_check(name.strip()):
+            return jsonify({"code": -1, "message": "文件名无效，不能包含路径分隔符"}), 400
+        name = name.strip()
+        if not isinstance(project_id, str) or not _WS_PROJECT_ID_RE.fullmatch(project_id):
+            return jsonify({"code": -1, "message": "项目 ID 无效"}), 400
+        if kind not in ("file", "directory"):
+            return jsonify({"code": -1, "message": "kind 必须是 file 或 directory"}), 400
+        if parent_id is not None and (
+            isinstance(parent_id, bool) or not isinstance(parent_id, int) or parent_id <= 0
+        ):
+            return jsonify({"code": -1, "message": "父目录 ID 无效"}), 400
         with _DB_LOCK:
             c = _db_conn()
+            project = c.execute("SELECT id FROM workspace_projects WHERE id=?", (project_id,)).fetchone()
+            if project is None:
+                c.close()
+                return jsonify({"code": -1, "message": "项目不存在"}), 404
+            if parent_id is not None:
+                parent = c.execute(
+                    "SELECT workspace_id,kind FROM workspace_files "
+                    "WHERE id=? AND deleted_at IS NULL",
+                    (parent_id,),
+                ).fetchone()
+                if parent is None or parent["workspace_id"] != project_id or parent["kind"] != "directory":
+                    c.close()
+                    return jsonify({"code": -1, "message": "父目录不存在或不属于当前项目"}), 400
+            duplicate = c.execute(
+                "SELECT id FROM workspace_files WHERE workspace_id=? AND parent_id IS ? "
+                "AND name=? AND deleted_at IS NULL",
+                (project_id, parent_id, name),
+            ).fetchone()
+            if duplicate:
+                c.close()
+                return jsonify({"code": -1, "message": "同一目录下已存在同名文件"}), 409
             now = int(time.time())
-            cur = c.execute("INSERT INTO workspace_files(name, content, version, updated_at) "
-                            "VALUES(?,?,?,?)", (name, "", 1, now))
+            cur = c.execute(
+                "INSERT INTO workspace_files(name,parent_id,workspace_id,kind,content,version,updated_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (name, parent_id, project_id, kind, "", 1, now),
+            )
             file_id = cur.lastrowid
-            _snapshot_file(c, file_id, "", "manual", 0)
-            c.commit(); c.close()
-        return jsonify({"code": 0, "id": file_id, "name": name, "version": 1})
+            if kind == "file":
+                _snapshot_file(c, file_id, "", "manual", 0)
+            c.execute("UPDATE workspace_projects SET updated_at=? WHERE id=?", (now, project_id))
+            c.commit()
+            c.close()
+        return jsonify({
+            "code": 0, "id": file_id, "name": name, "version": 1,
+            "workspace_id": project_id, "parent_id": parent_id, "kind": kind,
+        }), 201
+
+    project_id = request.args.get("project_id", request.args.get("workspace_id"))
+    if project_id is not None and (
+        not isinstance(project_id, str) or not _WS_PROJECT_ID_RE.fullmatch(project_id)
+    ):
+        return jsonify({"code": -1, "message": "项目 ID 无效"}), 400
     with _DB_LOCK:
         c = _db_conn()
-        rows = c.execute("SELECT id, name, version, updated_at, "
-                         "length(content) AS size FROM workspace_files "
-                         "WHERE deleted_at IS NULL ORDER BY updated_at DESC").fetchall()
+        query = (
+            "SELECT id,name,parent_id,workspace_id,kind,version,updated_at,"
+            "length(content) AS size FROM workspace_files WHERE deleted_at IS NULL"
+        )
+        params = []
+        if project_id is not None:
+            query += " AND workspace_id=?"
+            params.append(project_id)
+        query += " ORDER BY kind DESC,updated_at DESC"
+        rows = c.execute(query, params).fetchall()
         c.close()
-    return jsonify({"code": 0, "items": [dict(r) for r in rows]})
+    return jsonify({"code": 0, "items": [dict(row) for row in rows]})
 
-@workspace_bp.route("/api/workspace/files/<int:file_id>", methods=["GET", "PUT", "DELETE"])
+
+@workspace_bp.route("/api/workspace/files/<int:file_id>/versions", methods=["GET"])
+def api_ws_file_versions(file_id):
+    with _DB_LOCK:
+        c = _db_conn()
+        exists = c.execute(
+            "SELECT id FROM workspace_files WHERE id=? AND deleted_at IS NULL",
+            (file_id,),
+        ).fetchone()
+        if exists is None:
+            c.close()
+            return jsonify({"code": -1, "message": "文件不存在"}), 404
+        rows = c.execute(
+            "SELECT id,source,base_version,created_at,length(content) AS size "
+            "FROM workspace_file_versions WHERE file_id=? ORDER BY created_at DESC LIMIT 50",
+            (file_id,),
+        ).fetchall()
+        c.close()
+    return jsonify({"code": 0, "items": [dict(row) for row in rows]})
+
+
+@workspace_bp.route("/api/workspace/files/<int:file_id>/restore", methods=["POST"])
+def api_ws_file_restore(file_id):
+    body = request.get_json(force=True, silent=True) or {}
+    version_id = body.get("version_id")
+    base_version = body.get("base_version")
+    if (
+        isinstance(version_id, bool) or not isinstance(version_id, int) or version_id <= 0
+        or isinstance(base_version, bool) or not isinstance(base_version, int) or base_version < 1
+    ):
+        return jsonify({"code": -1, "message": "版本 ID 或当前版本无效"}), 400
+    with _DB_LOCK:
+        c = _db_conn()
+        file_row = c.execute(
+            "SELECT version FROM workspace_files WHERE id=? AND deleted_at IS NULL",
+            (file_id,),
+        ).fetchone()
+        version_row = c.execute(
+            "SELECT content FROM workspace_file_versions WHERE id=? AND file_id=?",
+            (version_id, file_id),
+        ).fetchone()
+        if file_row is None or version_row is None:
+            c.close()
+            return jsonify({"code": -1, "message": "文件或历史版本不存在"}), 404
+        if file_row["version"] != base_version:
+            c.close()
+            return jsonify({"code": 409, "message": "文件已被其他位置修改，请刷新后重试",
+                            "current_version": file_row["version"]}), 409
+        current_version = file_row["version"]
+        content = version_row["content"]
+        new_version = current_version + 1
+        _snapshot_file(c, file_id, content, "restore", current_version)
+        now = int(time.time())
+        c.execute(
+            "UPDATE workspace_files SET content=?,version=?,updated_at=? WHERE id=?",
+            (content, new_version, now, file_id),
+        )
+        c.commit()
+        c.close()
+    return jsonify({"code": 0, "version": new_version, "content": content})
+
+
+@workspace_bp.route("/api/workspace/files/<int:file_id>", methods=["GET", "PUT", "PATCH", "DELETE"])
 def api_ws_file(file_id):
     if request.method == "GET":
         with _DB_LOCK:
             c = _db_conn()
-            row = c.execute("SELECT id, name, content, version, updated_at FROM workspace_files "
-                            "WHERE id=? AND deleted_at IS NULL", (file_id,)).fetchone()
+            row = c.execute(
+                "SELECT id,name,parent_id,workspace_id,kind,content,version,updated_at "
+                "FROM workspace_files WHERE id=? AND deleted_at IS NULL",
+                (file_id,),
+            ).fetchone()
             c.close()
         if not row:
-            return jsonify({"code": -1, "message": "文件不存在"})
+            return jsonify({"code": -1, "message": "文件不存在"}), 404
+        if row["kind"] != "file":
+            return jsonify({"code": -1, "message": "所选项目是目录，不是文件"}), 400
         return jsonify({"code": 0, **dict(row)})
+
+    if request.method == "PATCH":
+        body = request.get_json(force=True, silent=True) or {}
+        name = body.get("name")
+        if not isinstance(name, str) or not _ws_scope_check(name.strip()):
+            return jsonify({"code": -1, "message": "新名称无效"}), 400
+        name = name.strip()
+        with _DB_LOCK:
+            c = _db_conn()
+            row = c.execute(
+                "SELECT workspace_id,parent_id,kind FROM workspace_files "
+                "WHERE id=? AND deleted_at IS NULL",
+                (file_id,),
+            ).fetchone()
+            if row is None:
+                c.close()
+                return jsonify({"code": -1, "message": "文件不存在"}), 404
+            duplicate = c.execute(
+                "SELECT id FROM workspace_files WHERE workspace_id=? AND parent_id IS ? "
+                "AND name=? AND id<>? AND deleted_at IS NULL",
+                (row["workspace_id"], row["parent_id"], name, file_id),
+            ).fetchone()
+            if duplicate:
+                c.close()
+                return jsonify({"code": -1, "message": "同一目录下已存在同名文件"}), 409
+            c.execute("UPDATE workspace_files SET name=?,updated_at=? WHERE id=?",
+                      (name, int(time.time()), file_id))
+            c.commit()
+            c.close()
+        return jsonify({"code": 0, "name": name})
 
     if request.method == "PUT":
         body = request.get_json(force=True, silent=True) or {}
         content = body.get("content", "")
         base_version = body.get("base_version")
-        if base_version is None:
-            return jsonify({"code": -1, "message": "缺少 base_version（乐观锁必需）"})
+        if not isinstance(content, str) or len(content) > 1_000_000:
+            return jsonify({"code": -1, "message": "文件内容必须是字符串且不能超过1MB"}), 400
+        if isinstance(base_version, bool) or not isinstance(base_version, int) or base_version < 1:
+            return jsonify({"code": -1, "message": "缺少有效 base_version（乐观锁必需）"}), 400
         with _DB_LOCK:
             c = _db_conn()
-            row = c.execute("SELECT version FROM workspace_files "
-                            "WHERE id=? AND deleted_at IS NULL", (file_id,)).fetchone()
-            if not row:
+            row = c.execute(
+                "SELECT version,workspace_id,kind FROM workspace_files "
+                "WHERE id=? AND deleted_at IS NULL",
+                (file_id,),
+            ).fetchone()
+            if not row or row["kind"] != "file":
                 c.close()
-                return jsonify({"code": -1, "message": "文件不存在"})
+                return jsonify({"code": -1, "message": "文件不存在"}), 404
             current_v = row["version"]
             if current_v != base_version:
                 c.close()
-                return jsonify({"code": 409, "message": "文件已被修改，请刷新后重试",
-                                "current_version": current_v})
+                return jsonify({"code": -1, "message": "文件已被修改，请刷新后重试",
+                                "current_version": current_v}), 409
             now = int(time.time())
             new_v = current_v + 1
             c.execute("UPDATE workspace_files SET content=?, version=?, updated_at=? WHERE id=?",
                       (content, new_v, now, file_id))
             _snapshot_file(c, file_id, content, "manual", current_v)
-            c.commit(); c.close()
+            c.execute(
+                "UPDATE workspace_projects SET updated_at=? WHERE id=?",
+                (now, row["workspace_id"]),
+            )
+            c.commit()
+            c.close()
         return jsonify({"code": 0, "version": new_v})
 
     if request.method == "DELETE":
+        now = int(time.time())
         with _DB_LOCK:
             c = _db_conn()
-            c.execute("UPDATE workspace_files SET deleted_at=? WHERE id=?",
-                      (int(time.time()), file_id))
-            c.commit(); c.close()
+            row = c.execute(
+                "SELECT parent_id FROM workspace_files WHERE id=? AND deleted_at IS NULL",
+                (file_id,),
+            ).fetchone()
+            if row is None:
+                c.close()
+                return jsonify({"code": -1, "message": "文件不存在"}), 404
+            pending = [file_id]
+            descendants = []
+            while pending:
+                current = pending.pop()
+                descendants.append(current)
+                children = c.execute(
+                    "SELECT id FROM workspace_files WHERE parent_id=? AND deleted_at IS NULL",
+                    (current,),
+                ).fetchall()
+                pending.extend(child["id"] for child in children)
+            placeholders = ",".join("?" for _ in descendants)
+            c.execute(
+                "UPDATE workspace_files SET deleted_at=? WHERE id IN (%s)" % placeholders,
+                [now] + descendants,
+            )
+            c.commit()
+            c.close()
         return jsonify({"code": 0})

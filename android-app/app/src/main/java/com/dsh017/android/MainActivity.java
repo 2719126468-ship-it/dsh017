@@ -12,6 +12,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.webkit.DownloadListener;
 import android.webkit.HttpAuthHandler;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -100,6 +101,7 @@ public class MainActivity extends Activity {
 
         webView = new WebView(this);
         configureWebView();
+        webView.addJavascriptInterface(new ProviderKeyBridge(), "DSHProviderKeys");
 
         root.addView(toolbar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
@@ -245,7 +247,8 @@ public class MainActivity extends Activity {
                 launcher.callAttr("start_services",
                         dataDir.getAbsolutePath(),
                         presetDir.getAbsolutePath(),
-                        apiKeyStore.read());
+                        apiKeyStore.read(),
+                        apiKeyStore.readProviderKeysJson());
                 boolean ready = launcher.callAttr("wait_ready", 60).toBoolean();
                 String errors = launcher.callAttr("startup_errors").toString();
 
@@ -293,6 +296,25 @@ public class MainActivity extends Activity {
                     while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
                 }
             }
+        }
+    }
+
+    private final class ProviderKeyBridge {
+        @JavascriptInterface
+        public boolean save(String providerId, String apiKey) {
+            String page = webView == null ? "" : String.valueOf(webView.getUrl());
+            if (!page.startsWith("http://127.0.0.1:8092/providers")) return false;
+            if (providerId == null || apiKey == null || apiKey.length() > 4096) return false;
+            if (!apiKeyStore.saveProviderKey(providerId, apiKey)) return false;
+            backendExecutor.execute(() -> {
+                try {
+                    Python.getInstance().getModule("android_entry")
+                            .callAttr("set_provider_key", providerId, apiKey == null ? "" : apiKey);
+                } catch (Throwable ignored) {
+                    // The encrypted key is persisted and will be loaded at next startup.
+                }
+            });
+            return true;
         }
     }
 

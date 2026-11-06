@@ -24,10 +24,27 @@ class ChatStreamCleanupTests(unittest.TestCase):
         app = Flask(__name__)
         upstream = FakeStreamingResponse()
         payload = {"messages": [{"role": "user", "content": "hello"}]}
+        provider = {
+            "id": "zhipu",
+            "name": "Test provider",
+            "base_url": "https://provider.example.test/v1",
+            "protocol": "openai-chat-completions",
+            "models": ["glm-4.7-flash"],
+            "default_model": "glm-4.7-flash",
+            "enabled": True,
+        }
 
-        with patch("app.chat_ui.client.s.post", return_value=upstream):
+        with patch(
+            "app.chat_ui.resolve_provider",
+            return_value=(
+                provider,
+                "test-api-key",
+                "https://provider.example.test/v1/chat/completions",
+            ),
+        ), patch("app.chat_ui.client.s.post", return_value=upstream):
             with app.test_request_context("/api/chat", method="POST", json=payload):
                 response = api_chat()
+                self.assertEqual(response.status_code, 200)
                 stream = iter(response.response)
                 first_event = next(stream)
                 self.assertIn("partial reply", first_event)
