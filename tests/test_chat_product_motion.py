@@ -89,7 +89,7 @@ class ChatProductMotionTests(unittest.TestCase):
 
     def test_dsh_native_theme_has_its_own_visual_identity(self):
         self.assertIn('html[data-dsh-theme="original"] .composer', _THEME_CSS)
-        self.assertIn('linear-gradient(135deg,#647CFF,#8A63E9)', _THEME_CSS)
+        self.assertIn('linear-gradient(135deg,#D97757,#BD5D42)', _THEME_CSS)
         self.assertIn('html[data-dsh-theme="original"][data-dsh-mode="dark"]', _THEME_CSS)
 
     def test_canvas_pane_uses_transitionable_closed_and_open_states(self):
