@@ -3,7 +3,7 @@
 > **文档状态：** 战略基线 / 执行规划  
 > **规划基准日：** 2026-11-07  
 > **规划周期：** 2026 Q4—2027 Q4  
-> **当前仓库基线：** \`main\`，审查时可见最新提交 \`ae8467779ab9b688f2d45cfedec2fa430c1c3ece\`  
+> **当前仓库基线：** `main`，审查时可见最新提交 `ae8467779ab9b688f2d45cfedec2fa430c1c3ece`  
 > **产品定位：** Personal AI Operating Environment（个人 AI 工作与生活中枢）
 
 本文件是 DSH-017 的长期产品战略、架构方向和版本规划依据。它不意味着文中所有目标能力都已实现。凡涉及现状的描述均以当前仓库代码、README、Android README、测试文件和提交记录为依据；未完成验收的能力会明确标为“待验证”。
@@ -214,11 +214,11 @@ Security Center 不应该变成另一个需要独立维护的页面集合。它�
 
 未来任务引擎应至少使用以下概念（字段名可在实现阶段定稿）：
 
-- \`task_id\`、\`task_type\`、\`created_at\`、\`updated_at\`
-- \`status\`: queued / planning / awaiting_approval / running / verifying / completed / failed / cancelled
-- \`input\`、\`plan\`、\`context_refs\`、\`tool_calls\`
-- \`approval_state\`、\`permission_scope\`、\`retry_count\`
-- \`result_refs\`、\`error_code\`、\`audit_refs\`
+- `task_id`、`task_type`、`created_at`、`updated_at`
+- `status`: queued / planning / awaiting_approval / running / verifying / completed / failed / cancelled
+- `input`、`plan`、`context_refs`、`tool_calls`
+- `approval_state`、`permission_scope`、`retry_count`
+- `result_refs`、`error_code`、`audit_refs`
 
 任务引擎必须支持取消、超时、幂等或重复执行保护、有限重试和失败恢复。先构建单 Agent、单任务执行能力，再考虑多 Agent 协作。
 
@@ -467,9 +467,9 @@ Workspace 是项目数据和修改的权威载体。功能优先级：
 - 依赖项、优先级和目标版本。
 
 建议标签：
-- 领域：\`core\`、\`ai-intelligence\`、\`workspace\`、\`agent\`、\`media\`、\`personal-data\`、\`system\`、\`android\`、\`security\`。
-- 优先级：\`priority:P0\`、\`priority:P1\`、\`priority:P2\`。
-- 类型：\`type:bug\`、\`type:feature\`、\`type:security\`、\`type:technical-debt\`、\`type:research\`。
+- 领域：`core`、`ai-intelligence`、`workspace`、`agent`、`media`、`personal-data`、`system`、`android`、`security`。
+- 优先级：`priority:P0`、`priority:P1`、`priority:P2`。
+- 类型：`type:bug`、`type:feature`、`type:security`、`type:technical-debt`、`type:research`。
 
 优先级定义：
 - **P0：** 阻断发布、数据完整性、安全边界或核心流程。
