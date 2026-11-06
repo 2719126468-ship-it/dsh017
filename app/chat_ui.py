@@ -884,12 +884,14 @@ html[data-theme="dark"] .canvas-pane{
       <span class="model">GLM-4.7</span>
     </div>
     <div class="messages-wrap">
-      <div class="messages" id="msgs">
+      <div class="messages" id="msgs" aria-live="off">
         <div class="welcome" id="welcome">
           <h2>有什么可以帮你的？</h2>
           <p>输入消息开始对话 · 支持流式输出与预设切换</p>
         </div>
       </div>
+      <button id="jumpLatest" type="button" aria-label="回到最新消息">↓ 最新消息</button>
+      <div id="chatAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
     <div class="composer" id="composer">
       <textarea id="input" rows="1" placeholder="给智谱清言发送消息…"></textarea>
@@ -937,21 +939,48 @@ html[data-theme="dark"] .canvas-pane{
   var sidebar   = document.getElementById('sidebar');
   var mask      = document.getElementById('mask');
   var presetSel = document.getElementById('presetSel');
+  var composer  = document.getElementById('composer');
+  var jumpLatest = document.getElementById('jumpLatest');
+  var chatAnnouncer = document.getElementById('chatAnnouncer');
 
   if(typeof window.wsContext === 'undefined') window.wsContext = null;
-var history = [];          // [{role, content}]
+  var history = [];
   var busy = false;
   var currentSystem = '';
+  var autoFollow = true;
+  var mobileRefocusAfterStream = false;
+  function isNearBottom() {
+    return msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 120;
+  }
+  function updateJumpLatest() {
+    if(jumpLatest) jumpLatest.classList.toggle('visible', !isNearBottom());
+  }
+  msgs.addEventListener('scroll', function() {
+    autoFollow = isNearBottom();
+    updateJumpLatest();
+  }, {passive:true});
+  if(jumpLatest) {
+    jumpLatest.onclick = function() {
+      autoFollow = true;
+      scrollBottom(true);
+      jumpLatest.classList.remove('visible');
+    };
+  }
 
   /* ================= 侧边栏 ================= */
   function openSb(){
     sidebar.classList.add('open');
     mask.classList.add('show');
+    sidebar.setAttribute('aria-hidden', 'false');
   }
   function closeSb(){
     sidebar.classList.remove('open');
     mask.classList.remove('show');
+    sidebar.setAttribute('aria-hidden', 'true');
   }
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && sidebar.classList.contains('open')) closeSb();
+  });
   function isMobile(){ return window.innerWidth <= 1024; }
 
   document.getElementById('menuBtn').onclick = openSb;
@@ -985,9 +1014,235 @@ var history = [];          // [{role, content}]
   }, {passive:true});
 
   /* ================= 工具 ================= */
-  function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){
+  function esc(s){return String(s||'').replace(/[&<>\"]/g,function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
-  function scrollBottom(){ msgs.scrollTop = msgs.scrollHeight; }
+  function scrollBottom(force){
+    if(force || autoFollow) msgs.scrollTop = msgs.scrollHeight;
+    updateJumpLatest();
+  }
+  function appendInlineMarkdown(parent, source) {
+    var text = String(source || '');
+    var tick = String.fromCharCode(96);
+    var tokenPattern = new RegExp('(' + tick + '[^' + tick + ']+' + tick +
+      '|\\*\\*[^*]+\\*\\*|__[^_]+__|~~[^~]+~~|\\*[^*]+\\*|_[^_]+_' +
+      '|\\[[^\\]]+\\]\\(https?:\\/\\/[^\\s)]+\\))', 'g');
+    var last = 0, match;
+    while((match = tokenPattern.exec(text))) {
+      if(match.index > last) parent.appendChild(document.createTextNode(text.slice(last, match.index)));
+      var token = match[0], node = null;
+      if(token.charAt(0) === tick) {
+        node = document.createElement('code');
+        node.className = 'md-inline-code';
+        node.textContent = token.slice(1, -1);
+      } else if(token.indexOf('**') === 0 || token.indexOf('__') === 0) {
+        node = document.createElement('strong');
+        node.textContent = token.slice(2, -2);
+      } else if(token.indexOf('~~') === 0) {
+        node = document.createElement('del');
+        node.textContent = token.slice(2, -2);
+      } else if(token.charAt(0) === '*' || token.charAt(0) === '_') {
+        node = document.createElement('em');
+        node.textContent = token.slice(1, -1);
+      } else {
+        var linkStart = token.indexOf('](');
+        var linkLabel = linkStart > 1 ? token.slice(1, linkStart) : '';
+        var linkHref = linkStart > 1 ? token.slice(linkStart + 2, -1) : '';
+        if(linkHref.indexOf('https://') === 0 || linkHref.indexOf('http://') === 0) {
+          node = document.createElement('a');
+          node.className = 'md-link';
+          node.textContent = linkLabel;
+          node.href = linkHref;
+          node.target = '_blank';
+          node.rel = 'noopener noreferrer';
+        }
+      }
+      if(node) parent.appendChild(node);
+      else parent.appendChild(document.createTextNode(token));
+      last = tokenPattern.lastIndex;
+    }
+    if(last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+  }
+
+  function renderAssistantMarkdown(target, source) {
+    target.textContent = '';
+    var nl = String.fromCharCode(10);
+    var lines = String(source || '').replace(new RegExp(String.fromCharCode(13), 'g'), '').split(nl);
+    var i = 0, tick = String.fromCharCode(96);
+    var fenceStart = new RegExp('^\\s*' + tick + tick + tick + '\\s*([a-zA-Z0-9_+.-]*)');
+    var fenceEnd = new RegExp('^\\s*' + tick + tick + tick + '\\s*$');
+    var headingPattern = new RegExp('^\\s*(#{1,3})\\s+(.+)$');
+    var unorderedPattern = new RegExp('^\\s*[-*+]\\s+');
+    var orderedPattern = new RegExp('^\\s*\\d+\\.\\s+');
+    var quotePattern = new RegExp('^\\s*>');
+    var hrPattern = new RegExp('^\\s*([-*_]\\s*){3,}$');
+    var tableSeparatorPattern = new RegExp('^\\s*\\|?\\s*:?-{3,}:?\\s*(?:\\|\\s*:?-{3,}:?\\s*)*\\|?\\s*$');
+
+    function splitTableCells(row) {
+      var value = row.trim();
+      if(value.charAt(0) === '|') value = value.slice(1);
+      if(value.charAt(value.length - 1) === '|') value = value.slice(0, -1);
+      return value.split('|').map(function(cell){ return cell.trim(); });
+    }
+    function isTableStart(index) {
+      return index + 1 < lines.length && lines[index].indexOf('|') !== -1 &&
+        tableSeparatorPattern.test(lines[index + 1]);
+    }
+    function isBlockStart(line, index) {
+      return fenceStart.test(line) || headingPattern.test(line) ||
+        unorderedPattern.test(line) || orderedPattern.test(line) ||
+        quotePattern.test(line) || hrPattern.test(line) || isTableStart(index);
+    }
+
+    while(i < lines.length) {
+      var line = lines[i];
+      if(!line.trim()) { i++; continue; }
+
+      if(isTableStart(i)) {
+        var headerCells = splitTableCells(lines[i]);
+        var wrap = document.createElement('div');
+        wrap.className = 'md-table-wrap md-rendered';
+        var table = document.createElement('table');
+        table.className = 'md-table';
+        var thead = document.createElement('thead');
+        var headerRow = document.createElement('tr');
+        headerCells.forEach(function(cellText) {
+          var th = document.createElement('th');
+          appendInlineMarkdown(th, cellText);
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        var tbody = document.createElement('tbody');
+        i += 2;
+        while(i < lines.length && lines[i].trim() && lines[i].indexOf('|') !== -1 &&
+              !isBlockStart(lines[i], i)) {
+          var cells = splitTableCells(lines[i]);
+          var tr = document.createElement('tr');
+          for(var col = 0; col < headerCells.length; col++) {
+            var td = document.createElement('td');
+            appendInlineMarkdown(td, cells[col] || '');
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+          i++;
+        }
+        table.appendChild(tbody);
+        wrap.appendChild(table);
+        target.appendChild(wrap);
+        continue;
+      }
+
+      var fence = line.match(fenceStart);
+      if(fence) {
+        var codeLines = [];
+        i++;
+        while(i < lines.length && !fenceEnd.test(lines[i])) codeLines.push(lines[i++]);
+        if(i < lines.length) i++;
+        var codeWrap = document.createElement('div');
+        codeWrap.className = 'md-code md-rendered';
+        var codeHead = document.createElement('div');
+        codeHead.className = 'md-code-head';
+        var lang = document.createElement('span');
+        lang.textContent = fence[1] || 'CODE';
+        codeHead.appendChild(lang);
+        var codeCopy = document.createElement('button');
+        codeCopy.type = 'button';
+        codeCopy.className = 'md-code-copy';
+        codeCopy.textContent = '复制';
+        (function(copyButton, codeText){
+          copyButton.onclick = function(){
+            var clip = document.createElement('textarea');
+            clip.value = codeText;
+            clip.style.position = 'fixed';
+            clip.style.opacity = '0';
+            document.body.appendChild(clip);
+            clip.select();
+            try { document.execCommand('copy'); copyButton.textContent = '已复制'; }
+            catch(copyError) { copyButton.textContent = '复制失败'; }
+            document.body.removeChild(clip);
+            window.setTimeout(function(){ copyButton.textContent = '复制'; }, 1400);
+          };
+        })(codeCopy, codeLines.join(nl));
+        codeHead.appendChild(codeCopy);
+        codeWrap.appendChild(codeHead);
+        var pre = document.createElement('pre');
+        var code = document.createElement('code');
+        code.textContent = codeLines.join(nl);
+        pre.appendChild(code);
+        codeWrap.appendChild(pre);
+        target.appendChild(codeWrap);
+        continue;
+      }
+
+      var heading = line.match(headingPattern);
+      if(heading) {
+        var h = document.createElement('h' + heading[1].length);
+        h.className = 'md-h md-h' + heading[1].length + ' md-rendered';
+        appendInlineMarkdown(h, heading[2]);
+        target.appendChild(h);
+        i++;
+        continue;
+      }
+      if(hrPattern.test(line)) {
+        var hr = document.createElement('hr');
+        hr.className = 'md-hr';
+        target.appendChild(hr);
+        i++;
+        continue;
+      }
+      if(quotePattern.test(line)) {
+        var quoteLines = [];
+        while(i < lines.length && quotePattern.test(lines[i])) {
+          quoteLines.push(lines[i++].replace(new RegExp('^\\s*>\\s?'), ''));
+        }
+        var quote = document.createElement('blockquote');
+        quote.className = 'md-quote md-rendered';
+        appendInlineMarkdown(quote, quoteLines.join(' '));
+        target.appendChild(quote);
+        continue;
+      }
+
+      var unordered = unorderedPattern.test(line);
+      var ordered = orderedPattern.test(line);
+      if(unordered || ordered) {
+        var list = document.createElement(ordered ? 'ol' : 'ul');
+        list.className = 'md-list md-rendered';
+        var matcher = ordered ? orderedPattern : unorderedPattern;
+        while(i < lines.length && matcher.test(lines[i])) {
+          var li = document.createElement('li');
+          appendInlineMarkdown(li, lines[i++].replace(matcher, ''));
+          list.appendChild(li);
+        }
+        target.appendChild(list);
+        continue;
+      }
+
+      var paragraphLines = [];
+      while(i < lines.length && lines[i].trim() && !isBlockStart(lines[i], i)) {
+        paragraphLines.push(lines[i++]);
+      }
+      if(!paragraphLines.length) paragraphLines.push(lines[i++]);
+      var p = document.createElement('p');
+      p.className = 'md-p md-rendered';
+      appendInlineMarkdown(p, paragraphLines.join(nl));
+      target.appendChild(p);
+    }
+  }
+
+  function flushStreamText(state) {
+    if(state.pending && state.textNode) {
+      state.textNode.nodeValue += state.pending;
+      state.pending = '';
+    }
+    state.queued = false;
+    if(autoFollow) scrollBottom();
+  }
+  function queueStreamText(state, chunk) {
+    state.pending += chunk;
+    if(state.queued) return;
+    state.queued = true;
+    requestAnimationFrame(function(){ flushStreamText(state); });
+  }
 
   /* ================= 预设 ================= */
   fetch('/api/presets').then(function(r){return r.json()}).then(function(j){
@@ -1042,12 +1297,14 @@ var history = [];          // [{role, content}]
     msgs.innerHTML = '';
     if(history.length === 0){
       msgs.innerHTML = '<div class="welcome" id="welcome"><h2>有什么可以帮你的？</h2><p>输入消息开始对话 · 支持流式输出与预设切换</p></div>';
+      autoFollow = true;
+      updateJumpLatest();
       return;
     }
     history.forEach(function(m, idx){
       appendMessage(m, idx);
     });
-    scrollBottom();
+    scrollBottom(true);
   }
 
   function appendMessage(m, idx){
@@ -1057,7 +1314,8 @@ var history = [];          // [{role, content}]
 
     var body = document.createElement('div');
     body.className = 'msg-body';
-    body.textContent = m.content;
+    if(m.role === 'assistant') renderAssistantMarkdown(body, m.content);
+    else body.textContent = m.content;
     row.appendChild(body);
 
     // 用户消息：编辑框 + 编辑按钮
@@ -1152,17 +1410,22 @@ var history = [];          // [{role, content}]
     }
 
     msgs.appendChild(row);
-    scrollBottom();
     return row;
   }
 
   /* ================= 请求流式 ================= */
   async function requestStream(){
-    busy = true; sendBtn.disabled = true;
+    mobileRefocusAfterStream = document.activeElement === input && window.innerWidth > 768;
+    busy = true;
+    sendBtn.disabled = true;
+    composer.classList.add('is-streaming');
+    composer.setAttribute('aria-busy', 'true');
+    if(chatAnnouncer) chatAnnouncer.textContent = '正在生成回复';
+    autoFollow = isNearBottom();
 
-    // 思考中占位
     var typing = document.createElement('div');
     typing.className = 'typing';
+    typing.setAttribute('aria-label', '正在生成回复');
     typing.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
     msgs.appendChild(typing);
     scrollBottom();
@@ -1170,7 +1433,8 @@ var history = [];          // [{role, content}]
     var assistantRow = null;
     var fullText = '';
     var thinkShown = false;
-    var failed = false;
+    var streamState = {textNode:null, pending:'', queued:false};
+    var streamCompleted = false;
 
     try{
       var resp = await fetch('/api/chat', {
@@ -1202,12 +1466,14 @@ var history = [];          // [{role, content}]
           try{
             var j = JSON.parse(payload);
             if(j.error) throw new Error(typeof j.error === 'string' ? j.error : JSON.stringify(j.error));
-            // workspace_edit 事件
+            if(j.info) {
+              typing.setAttribute('aria-label', j.info);
+              continue;
+            }
             if((j.type === 'artifact_card' || j.type === 'pane_update') && j.data){
               handleArtifact(j.type, j.data);
               continue;
             }
-            // 兼容旧事件
             if(j.type === 'workspace_edit' && j.data){
               handleArtifact('artifact_card', j.data);
               continue;
@@ -1218,40 +1484,31 @@ var history = [];          // [{role, content}]
             }
             var delta = j.choices && j.choices[0] && j.choices[0].delta;
             if(delta && delta.reasoning_content){
-              if(!assistantRow){
-                if(!thinkShown){
-                  thinkShown = true;
-                  typing.innerHTML = '';
-                  var tp = document.createElement('div');
-                  tp.className = 'think-panel';
-                  tp.innerHTML = '<div class="think-head"><span class="arrow">▸</span>思考中 <span class="tlen">(0 字)</span></div><div class="think-body"></div>';
-                  typing.appendChild(tp);
-                  tp.querySelector('.think-head').onclick = function(){
-                    var isOpen = tp.classList.contains('open');
-                    if(isOpen){
-                      tp.classList.remove('open');
-                      tp.classList.add('collapsed');
-                    } else {
-                      tp.classList.remove('collapsed');
-                      tp.classList.add('open');
-                    }
-                  };
-                  var tb = tp.querySelector('.think-body');
-                  tb.textContent = '';
-                  window._thinkText = '';
-                  window._thinkBody = tb;
-                  window._thinkLen = tp.querySelector('.tlen');
-                }
+              if(!thinkShown && !assistantRow){
+                thinkShown = true;
+                typing.innerHTML = '';
+                var tp = document.createElement('div');
+                tp.className = 'think-panel';
+                tp.innerHTML = '<div class="think-head"><span class="arrow">▸</span>思考中 <span class="tlen">(0 字)</span></div><div class="think-body"></div>';
+                typing.appendChild(tp);
+                tp.querySelector('.think-head').onclick = function(){
+                  var isOpen = tp.classList.contains('open');
+                  tp.classList.toggle('open', !isOpen);
+                  tp.classList.toggle('collapsed', isOpen);
+                };
+                window._thinkText = '';
+                window._thinkBody = tp.querySelector('.think-body');
+                window._thinkLen = tp.querySelector('.tlen');
               }
               if(window._thinkBody){
                 window._thinkText += delta.reasoning_content;
                 window._thinkBody.textContent = window._thinkText;
                 window._thinkLen.textContent = '(' + window._thinkText.length + ' 字)';
+                if(autoFollow) scrollBottom();
               }
             }
             if(delta && delta.content){
               if(!assistantRow){
-                // 先把思考面板从 typing 里摘出来，保留在消息流里
                 var tpEl = typing.querySelector('.think-panel');
                 if(tpEl){
                   tpEl.classList.add('collapsed');
@@ -1260,31 +1517,24 @@ var history = [];          // [{role, content}]
                   msgs.insertBefore(tpEl, typing);
                 }
                 if(typing.parentNode) typing.remove();
-                window._thinkBody = null; window._thinkLen = null;
+                window._thinkBody = null;
+                window._thinkLen = null;
+
                 assistantRow = document.createElement('div');
                 assistantRow.className = 'msg-row assistant';
                 var body = document.createElement('div');
-                body.className = 'msg-body';
+                body.className = 'msg-body streaming-text';
+                streamState.textNode = document.createTextNode('');
+                body.appendChild(streamState.textNode);
+                var cursor = document.createElement('span');
+                cursor.className = 'cursor';
+                cursor.setAttribute('aria-hidden', 'true');
+                body.appendChild(cursor);
                 assistantRow.appendChild(body);
                 msgs.appendChild(assistantRow);
               }
               fullText += delta.content;
-              var bodyEl = assistantRow.querySelector('.msg-body');
-              // 清空并重新渲染为逐词 span
-              bodyEl.innerHTML = '';
-              var words = fullText.split(/(\s+)/);
-              words.forEach(function(w, wi) {
-                if(!w.trim()) { bodyEl.appendChild(document.createTextNode(w)); return; }
-                var sp = document.createElement('span');
-                sp.textContent = w;
-                sp.style.animationDelay = (wi * 0.03) + 's';
-                bodyEl.appendChild(sp);
-                bodyEl.appendChild(document.createTextNode(' '));
-              });
-              var cur = document.createElement('span');
-              cur.className = 'cursor';
-              bodyEl.appendChild(cur);
-              scrollBottom();
+              queueStreamText(streamState, delta.content);
             }
           }catch(pe){
             if(pe.message && pe.message.indexOf('error') !== -1) throw pe;
@@ -1292,22 +1542,34 @@ var history = [];          // [{role, content}]
         }
       }
 
+      if(streamState.queued) flushStreamText(streamState);
+      streamCompleted = true;
       if(typing.parentNode) typing.remove();
+      if(!assistantRow && typing.querySelector('.think-panel')) {
+        var completedThought = typing.querySelector('.think-panel');
+        completedThought.classList.add('collapsed');
+        var thoughtHead = completedThought.querySelector('.think-head');
+        if(thoughtHead) thoughtHead.innerHTML = '<span class="arrow">▸</span>思考过程 · 点击展开';
+        msgs.insertBefore(completedThought, typing);
+      }
 
       if(assistantRow){
         var bodyEl2 = assistantRow.querySelector('.msg-body');
-        bodyEl2.textContent = fullText;
+        renderAssistantMarkdown(bodyEl2, fullText);
         history.push({role:'assistant', content: fullText, fresh: true});
-        // 重新渲染操作栏（保留流式内容）
         var idx = history.length - 1;
         assistantRow.dataset.idx = idx;
         attachAssistantActions(assistantRow, fullText, idx);
         assistantRow.classList.add('show-actions');
-        setTimeout(function(){ assistantRow.classList.remove('show-actions'); }, 3000);
+        setTimeout(function(){ assistantRow.classList.remove('show-actions'); }, 2800);
       }
     }catch(e){
-      failed = true;
       if(typing.parentNode) typing.remove();
+      if(streamState.queued) flushStreamText(streamState);
+      if(assistantRow) {
+        var partial = assistantRow.querySelector('.msg-body');
+        if(partial) partial.textContent = fullText;
+      }
       var errRow = document.createElement('div');
       errRow.className = 'msg-row assistant';
       var errBody = document.createElement('div');
@@ -1316,10 +1578,15 @@ var history = [];          // [{role, content}]
       errBody.textContent = '连接失败: ' + e.message;
       errRow.appendChild(errBody);
       msgs.appendChild(errRow);
+      if(chatAnnouncer) chatAnnouncer.textContent = '回复生成失败';
       scrollBottom();
     }finally{
-      busy = false; sendBtn.disabled = false;
-      input.focus();
+      busy = false;
+      sendBtn.disabled = false;
+      composer.classList.remove('is-streaming');
+      composer.removeAttribute('aria-busy');
+      if(streamCompleted && chatAnnouncer) chatAnnouncer.textContent = '回复生成完成';
+      if(mobileRefocusAfterStream) input.focus();
     }
   }
 
@@ -1376,6 +1643,8 @@ var history = [];          // [{role, content}]
     input.style.height = '44px';
     history.push({role:'user', content:text});
     renderAll();
+    autoFollow = true;
+    scrollBottom(true);
     await requestStream();
   }
 
@@ -1406,7 +1675,7 @@ var history = [];          // [{role, content}]
     renderAll();
     input.value = '';
     input.style.height = '44px';
-    input.focus();
+    if(window.innerWidth > 768) input.focus();
   }
 
   /* ================= 绑定 ================= */
