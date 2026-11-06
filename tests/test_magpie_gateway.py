@@ -75,7 +75,8 @@ class MagpieGatewayTests(unittest.TestCase):
         self.assertEqual(payload["name"], "magpie")
         factory.assert_called_once_with("127.0.0.1", 3425, timeout=3)
         connection.request.assert_called_once()
-        method, path, headers = connection.request.call_args.args
+        method, path = connection.request.call_args.args
+        headers = connection.request.call_args.kwargs.get("headers", {})
         self.assertEqual((method, path), ("GET", "/api/hello"))
         self.assertNotIn("Authorization", headers)
         connection.close.assert_called_once()
