@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """Chat UI：/api/chat 流式 + CHAT_HTML + /chat 页面"""
 import os
+import codecs
 import json
 import time
 import urllib.parse
@@ -11,6 +12,20 @@ from app.bili_client import client
 from app.providers import resolve_provider
 
 chat_ui_bp = Blueprint('chat_ui', __name__)
+
+
+def _iter_utf8_text(chunks):
+    """Incrementally decode upstream chunks and flush the decoder at EOF."""
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    for chunk in chunks:
+        if not chunk:
+            continue
+        decoded = decoder.decode(chunk, final=False)
+        if decoded:
+            yield decoded
+    tail = decoder.decode(b"", final=True)
+    if tail:
+        yield tail
 
 _MAX_CHAT_MESSAGES = 100
 _MAX_CHAT_CHARS = 200_000
@@ -121,8 +136,14 @@ def api_chat():
         for attempt in range(max_attempts):
             r = None
             try:
-                r = client.s.post(chat_url, headers=headers, json=payload,
-                                  stream=True, timeout=180)
+                r = client.s.post(
+                    chat_url,
+                    headers=headers,
+                    json=payload,
+                    stream=True,
+                    timeout=180,
+                    allow_redirects=False,
+                )
                 # 状态码检查：429/1305 走重试，其他非 200 直接吐错误
                 if r.status_code != 200:
                     try:
@@ -263,10 +284,9 @@ def api_chat():
                                     {"type": event_type, "data": val},
                                     ensure_ascii=False) + "\n\n"
 
-                for ch in r.iter_content(chunk_size=None, decode_unicode=False):
-                    if not ch:
+                for txt in _iter_utf8_text(r.iter_content(chunk_size=None, decode_unicode=False)):
+                    if not txt:
                         continue
-                    txt = ch.decode("utf-8", "ignore")
                     line_buf += txt
                     if not first_chunk_checked and line_buf:
                         first_chunk_checked = True
@@ -1974,95 +1994,107 @@ html[data-theme="dark"] .canvas-pane{
       var decoder = new TextDecoder();
       var buffer = '';
 
-      while(true){
+      function handleStreamLine(rawLine) {
+        var line = String(rawLine || '').trim();
+        if(!line || line.indexOf('data:') !== 0) return;
+        var payload = line.slice(5).replace(/^ /, '');
+        if(!payload || payload === '[DONE]') return;
+
+        var j;
+        try {
+          j = JSON.parse(payload);
+        } catch(parseError) {
+          return;
+        }
+        if(!j || typeof j !== 'object') return;
+        if(j.error) {
+          throw new Error(typeof j.error === 'string' ? j.error : JSON.stringify(j.error));
+        }
+        if(j.info) {
+          typing.setAttribute('aria-label', j.info);
+          return;
+        }
+        if((j.type === 'artifact_card' || j.type === 'pane_update') && j.data) {
+          handleArtifact(j.type, j.data);
+          return;
+        }
+        if(j.type === 'workspace_edit' && j.data) {
+          handleArtifact('artifact_card', j.data);
+          return;
+        }
+        if(j.type === 'error') {
+          console.warn('workspace error:', j.message);
+          return;
+        }
+
+        var delta = j.choices && j.choices[0] && j.choices[0].delta;
+        if(delta && delta.reasoning_content) {
+          if(!thinkShown && !assistantRow) {
+            thinkShown = true;
+            typing.innerHTML = '';
+            var tp = document.createElement('div');
+            tp.className = 'think-panel';
+            tp.innerHTML = '<div class="think-head"><span class="arrow">▸</span>思考中 <span class="tlen">(0 字)</span></div><div class="think-body"></div>';
+            typing.appendChild(tp);
+            tp.querySelector('.think-head').onclick = function() {
+              var isOpen = tp.classList.contains('open');
+              tp.classList.toggle('open', !isOpen);
+              tp.classList.toggle('collapsed', isOpen);
+            };
+            window._thinkText = '';
+            window._thinkBody = tp.querySelector('.think-body');
+            window._thinkLen = tp.querySelector('.tlen');
+          }
+          if(window._thinkBody) {
+            window._thinkText += delta.reasoning_content;
+            window._thinkBody.textContent = window._thinkText;
+            window._thinkLen.textContent = '(' + window._thinkText.length + ' 字)';
+            if(autoFollow) scrollBottom();
+          }
+        }
+        if(delta && delta.content) {
+          if(!assistantRow) {
+            var tpEl = typing.querySelector('.think-panel');
+            if(tpEl) {
+              tpEl.classList.add('collapsed');
+              var head = tpEl.querySelector('.think-head');
+              if(head) head.innerHTML = '<span class="arrow">▸</span>思考过程 · 点击展开';
+              msgs.insertBefore(tpEl, typing);
+            }
+            if(typing.parentNode) typing.remove();
+            window._thinkBody = null;
+            window._thinkLen = null;
+
+            assistantRow = document.createElement('div');
+            assistantRow.className = 'msg-row assistant';
+            var body = document.createElement('div');
+            body.className = 'msg-body streaming-text';
+            streamState.textNode = document.createTextNode('');
+            body.appendChild(streamState.textNode);
+            var cursor = document.createElement('span');
+            cursor.className = 'cursor';
+            cursor.setAttribute('aria-hidden', 'true');
+            body.appendChild(cursor);
+            assistantRow.appendChild(body);
+            msgs.appendChild(assistantRow);
+          }
+          fullText += delta.content;
+          queueStreamText(streamState, delta.content);
+        }
+      }
+
+      while(true) {
         var r = await reader.read();
-        if(r.done) break;
+        if(r.done) {
+          buffer += decoder.decode();
+          break;
+        }
         buffer += decoder.decode(r.value, {stream:true});
         var lines = buffer.split('\n');
         buffer = lines.pop();
-
-        for(var i=0; i<lines.length; i++){
-          var line = lines[i].trim();
-          if(!line || line.indexOf('data: ') !== 0) continue;
-          var payload = line.slice(6);
-          if(payload === '[DONE]') continue;
-          try{
-            var j = JSON.parse(payload);
-            if(j.error) throw new Error(typeof j.error === 'string' ? j.error : JSON.stringify(j.error));
-            if(j.info) {
-              typing.setAttribute('aria-label', j.info);
-              continue;
-            }
-            if((j.type === 'artifact_card' || j.type === 'pane_update') && j.data){
-              handleArtifact(j.type, j.data);
-              continue;
-            }
-            if(j.type === 'workspace_edit' && j.data){
-              handleArtifact('artifact_card', j.data);
-              continue;
-            }
-            if(j.type === 'error'){
-              console.warn('workspace error:', j.message);
-              continue;
-            }
-            var delta = j.choices && j.choices[0] && j.choices[0].delta;
-            if(delta && delta.reasoning_content){
-              if(!thinkShown && !assistantRow){
-                thinkShown = true;
-                typing.innerHTML = '';
-                var tp = document.createElement('div');
-                tp.className = 'think-panel';
-                tp.innerHTML = '<div class="think-head"><span class="arrow">▸</span>思考中 <span class="tlen">(0 字)</span></div><div class="think-body"></div>';
-                typing.appendChild(tp);
-                tp.querySelector('.think-head').onclick = function(){
-                  var isOpen = tp.classList.contains('open');
-                  tp.classList.toggle('open', !isOpen);
-                  tp.classList.toggle('collapsed', isOpen);
-                };
-                window._thinkText = '';
-                window._thinkBody = tp.querySelector('.think-body');
-                window._thinkLen = tp.querySelector('.tlen');
-              }
-              if(window._thinkBody){
-                window._thinkText += delta.reasoning_content;
-                window._thinkBody.textContent = window._thinkText;
-                window._thinkLen.textContent = '(' + window._thinkText.length + ' 字)';
-                if(autoFollow) scrollBottom();
-              }
-            }
-            if(delta && delta.content){
-              if(!assistantRow){
-                var tpEl = typing.querySelector('.think-panel');
-                if(tpEl){
-                  tpEl.classList.add('collapsed');
-                  var head = tpEl.querySelector('.think-head');
-                  if(head) head.innerHTML = '<span class="arrow">▸</span>思考过程 · 点击展开';
-                  msgs.insertBefore(tpEl, typing);
-                }
-                if(typing.parentNode) typing.remove();
-                window._thinkBody = null;
-                window._thinkLen = null;
-
-                assistantRow = document.createElement('div');
-                assistantRow.className = 'msg-row assistant';
-                var body = document.createElement('div');
-                body.className = 'msg-body streaming-text';
-                streamState.target = body;
-                var cursor = document.createElement('span');
-                cursor.className = 'cursor';
-                cursor.setAttribute('aria-hidden', 'true');
-                body.appendChild(cursor);
-                assistantRow.appendChild(body);
-                msgs.appendChild(assistantRow);
-              }
-              fullText += delta.content;
-              queueStreamText(streamState, delta.content);
-            }
-          }catch(pe){
-            if(pe.message && pe.message.indexOf('error') !== -1) throw pe;
-          }
-        }
+        for(var i=0; i<lines.length; i++) handleStreamLine(lines[i]);
       }
+      if(buffer) handleStreamLine(buffer);
 
       if(stopRequested) {
         var stoppedSignal = new Error('Generation stopped');
