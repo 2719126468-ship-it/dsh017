@@ -401,8 +401,7 @@ def resolve_provider(provider_id, model):
         raise ValueError("模型 ID 无效")
     if model not in provider["models"]:
         raise ValueError("该模型未列入此供应商的允许模型列表")
-    if not validate_provider_url(provider["base_url"]):
-        raise ValueError("供应商地址未通过出站安全校验")
+    # DNS validation and IP pinning happen atomically at the outbound transport.
     key = get_provider_secret(provider["id"])
     host = (urlsplit(provider["base_url"]).hostname or "").lower()
     local_no_key = host in {"127.0.0.1", "localhost", "::1"}
