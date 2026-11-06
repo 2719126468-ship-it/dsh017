@@ -1,6 +1,6 @@
 import unittest
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, Response
 
 from app.ui_theme import install_theme_support
 
@@ -17,6 +17,10 @@ class GlobalThemeSupportTests(unittest.TestCase):
         @app.route("/api")
         def api():
             return jsonify({"status": "ok"})
+
+        @app.route("/api/html")
+        def api_html():
+            return Response("<html><head></head><body>upstream</body></html>", mimetype="text/html")
 
         self.client = app.test_client()
 
@@ -66,9 +70,8 @@ class GlobalThemeSupportTests(unittest.TestCase):
         self.assertIn('id="dsh017-theme-switcher"', body)
 
     def test_api_html_payload_is_not_rewritten(self):
-        from flask import Response
         # An API may proxy an upstream HTML payload; it must never receive our UI script.
-        response = self.client.get("/api")
+        response = self.client.get("/api/html")
         self.assertNotIn("dsh017-theme-switcher", response.get_data(as_text=True))
 
     def test_non_html_response_is_not_modified_but_is_hardened(self):
