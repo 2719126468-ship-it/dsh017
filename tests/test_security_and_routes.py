@@ -80,6 +80,8 @@ class RouteTests(unittest.TestCase):
                 json={"file_id": 1, "base_version": 1, "mode": mode},
             )
             self.assertEqual(response.status_code, 400, repr(mode))
+        non_object = self.client.post("/api/workspace/apply_edit", json=["not", "an", "object"])
+        self.assertEqual(non_object.status_code, 400)
 
     def test_shorts_rejects_invalid_page(self):
         response = self.client.get("/api/shorts?q=test&page=0")
