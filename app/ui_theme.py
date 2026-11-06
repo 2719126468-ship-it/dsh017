@@ -670,6 +670,35 @@ html[data-dsh-theme="claude"] .mask {
   background: rgba(127,127,127,.12);
   font: .88em/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+.md-table-wrap {
+  max-width: 100%;
+  margin: 12px 0 15px;
+  overflow-x: auto;
+  border: 1px solid var(--border-2, rgba(127,127,127,.2));
+  border-radius: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.md-table th, .md-table td {
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--border, rgba(127,127,127,.15));
+  border-right: 1px solid var(--border, rgba(127,127,127,.15));
+  text-align: left;
+  vertical-align: top;
+  min-width: 76px;
+}
+.md-table th {
+  background: rgba(127,127,127,.08);
+  font-weight: 650;
+  color: var(--text);
+}
+.md-table tr:last-child td { border-bottom: 0; }
+.md-table th:last-child, .md-table td:last-child { border-right: 0; }
 .md-code {
   margin: 12px 0 15px;
   overflow: hidden;
