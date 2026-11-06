@@ -62,6 +62,13 @@ class ProviderUrlSecurityTests(unittest.TestCase):
         self.assertFalse(validate_provider_url_syntax("https://10.0.0.8/v1"))
         self.assertTrue(validate_provider_url_syntax("https://8.8.8.8/v1"))
 
+    def test_https_private_dns_target_cannot_be_connected(self):
+        with patch("app.provider_transport.socket.getaddrinfo", return_value=[
+            (2, 1, 6, "", ("8.8.8.8", 443)),
+            (2, 1, 6, "", ("10.0.0.8", 443)),
+        ]):
+            self.assertFalse(validate_provider_url("https://api.example.test/v1"))
+
 
 if __name__ == "__main__":
     unittest.main()
