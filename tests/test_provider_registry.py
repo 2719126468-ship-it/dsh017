@@ -17,7 +17,7 @@ class ProviderRegistryTests(unittest.TestCase):
         self.secrets_patch = patch.object(providers, "_SECRETS_PATH", self.secrets_path)
         self.config_patch.start()
         self.secrets_patch.start()
-        self.url_validation_patch = patch.object(providers, "validate_provider_url", return_value=True)
+        self.url_validation_patch = patch.object(providers, "validate_provider_url_syntax", return_value=True)
         self.url_validation_patch.start()
         self.runtime_before = dict(providers._RUNTIME_SECRETS)
         providers._RUNTIME_SECRETS.clear()
@@ -119,18 +119,19 @@ class ProviderRegistryTests(unittest.TestCase):
         response.json.return_value = {
             "data": [{"id": "model-z"}, {"id": "model-a"}, {"id": "../bad"}]
         }
-        with patch.object(providers.client.s, "get", return_value=response) as get:
+        with patch.object(providers, "provider_request", return_value=response) as get:
             models = providers.fetch_provider_models("sample-provider")
         self.assertEqual(models, ["model-a", "model-z"])
         self.assertEqual(
-            get.call_args.args[0],
+            get.call_args.args[1],
             "https://api.example.test/v1/models",
         )
         self.assertEqual(
             get.call_args.kwargs["headers"]["Authorization"],
             "Bearer secret-value",
         )
-        self.assertIs(get.call_args.kwargs["allow_redirects"], False)
+        self.assertEqual(get.call_args.args[0], "GET")
+        self.assertEqual(get.call_args.kwargs["timeout"], (5, 15))
 
 
 if __name__ == "__main__":

@@ -160,7 +160,7 @@ GitHub Actions 会在 push、PR 和手动触发时运行 Python 3.10–3.12 测�
 
 聊天与工作区 AI 共用供应商注册表，支持 OpenAI Chat Completions 兼容接口、自定义 Base URL、模型列表和 `/models` 自动发现。预设包含 OpenAI、DeepSeek、Z.ai/GLM、Kimi、Qwen、MiniMax、OpenRouter、SiliconFlow、Ollama、LM Studio 和 Magpie Gateway。
 
-远程供应商必须使用 HTTPS，且 DNS 返回的所有地址都必须是公网地址；HTTP 仅允许 `localhost` / loopback 本地网关。模型探测与聊天请求均禁用 HTTP 重定向，避免已验证地址跳转到其他主机。供应商密钥不会通过配置列表回显；Android APK 使用 Android Keystore 加密保存密钥。
+远程供应商必须使用 HTTPS，且每次实际请求都会解析 DNS、拒绝任何非公网结果，并把通过校验的数值 IP 固定到 TCP 连接；TLS 仍使用原域名进行 SNI 和证书校验。这样不会出现“校验时是公网 IP、连接时又被 DNS 改到内网”的时间差。HTTP 仅允许 `localhost` / loopback 本地网关。模型探测与聊天请求不使用系统 HTTP 代理，也不跟随重定向。离线时已保存的供应商仍留在列表中，但连接需要恢复网络后再试。供应商密钥不会通过配置列表回显；Android APK 使用 Android Keystore 加密保存密钥。
 
 Magpie 默认端口可通过下方的「检测本机 Magpie」一键发现；若使用自定义端口或另一台设备上的 Gateway，仍可手动添加兼容供应商。浏览器订阅登录由 Magpie 自己负责，DSH 不读取 Magpie/Qoder 的浏览器 Cookie，也不代替 Qoder 执行私有 OAuth 流程；不要把网站 Cookie 当成 Gateway Key 粘贴。
 
@@ -168,7 +168,9 @@ Magpie 默认端口可通过下方的「检测本机 Magpie」一键发现；若
 
 在同一台设备上启动 Magpie Gateway 后，进入「模型供应商」并点击「检测本机 Magpie」。DSH 只会访问固定的 loopback 地址 `127.0.0.1:3425`，核对 `/api/hello` 的 Magpie 标识，并从 `/v1/models` 读取可用模型；检测响应不会包含账号凭据。保存后可在聊天和工作区中选择 `magpie` 供应商。对于本机网关，DSH 使用 `magpie-dsh017` 作为调用方标识；它不是 Magpie 账号密码或订阅凭据。
 
-Magpie 负责订阅登录和令牌刷新，DSH 不会读取 Magpie 或 Qoder 的浏览器 Cookie。Android ARM64 终端版本可从 [Magpie Releases](https://github.com/yetone/magpie-releases/releases/latest) 获取。默认网关端口为 3425；若自行修改了 Magpie 端口，可继续通过自定义供应商手动配置。
+**Qoder 接入路径：** 在 Magpie 的 Plugins 中安装 `@magpie-community/opencode-qoder-auth`，对 `qoder` provider 完成插件提供的浏览器授权，然后回到 DSH 检测本机 Magpie 并同步模型目录。Qoder 账号授权与令牌刷新由 Magpie 插件负责，DSH 只调用 Magpie Gateway；不会读取 Qoder 浏览器 Cookie，也不自行模拟 Qoder 私有登录协议。
+
+Magpie 的登录与模型路由见 [官方入门文档](https://usemagpie.ai/docs/start) 和 [插件文档](https://usemagpie.ai/docs/plugins)。Android ARM64 终端版本可从 [Magpie Releases](https://github.com/yetone/magpie-releases/releases/latest) 获取。默认网关端口为 3425；若自行修改了 Magpie 端口，可继续通过自定义供应商手动配置。
 
 ## 已知限制
 
