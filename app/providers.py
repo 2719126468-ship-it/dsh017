@@ -17,9 +17,9 @@ from urllib.parse import urlsplit, urlunsplit
 
 from flask import Blueprint, jsonify, request, Response
 
-from app.bili_client import client
 from app.db import _DATA_DIR
 from app.security import validate_provider_url
+from app.provider_transport import provider_request
 
 provider_bp = Blueprint("providers", __name__)
 _LOCK = threading.RLock()
@@ -304,11 +304,11 @@ def fetch_provider_models(provider_id):
         headers["Authorization"] = "Bearer " + key
     if not validate_provider_url(provider["base_url"]):
         raise ValueError("供应商地址未通过出站安全校验")
-    response = client.s.get(
+    response = provider_request(
+        "GET",
         _models_url(provider["base_url"]),
         headers=headers,
         timeout=(5, 15),
-        allow_redirects=False,
     )
     if response.status_code < 200 or response.status_code >= 300:
         raise RuntimeError("HTTP %d: %s" % (response.status_code, response.text[:240]))
