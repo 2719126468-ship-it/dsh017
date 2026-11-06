@@ -1075,7 +1075,7 @@ html[data-theme="dark"] .canvas-pane{
     var orderedPattern = new RegExp('^\\s*\\d+\\.\\s+');
     var quotePattern = new RegExp('^\\s*>');
     var hrPattern = new RegExp('^\\s*([-*_]\\s*){3,}$');
-    var tableSeparatorPattern = new RegExp('^\\s*\\|?\\s*:?-{3,}:?\\s*(?:\\|\\s*:?-{3,}:?\\s*)+\\|?\\s*$');
+    var tableSeparatorPattern = new RegExp('^\\s*\\|?\\s*:?-{3,}:?\\s*(?:\\|\\s*:?-{3,}:?\\s*)*\\|?\\s*$');
 
     function splitTableCells(row) {
       var value = row.trim();
