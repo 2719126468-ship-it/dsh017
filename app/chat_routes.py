@@ -132,15 +132,30 @@ def api_x():
 def api_hn():
     """拉取 Hacker News 头条，官方 Firebase API，无需认证"""
     try:
-        limit = int(request.args.get("limit", 10))
-        top_ids = client.s.get("https://hacker-news.firebaseio.com/v0/topstories.json", timeout=10).json()
+        try:
+            limit = int(request.args.get("limit", 10))
+        except (TypeError, ValueError):
+            return jsonify({"code": -1, "message": "limit 必须是整数"}), 400
+        if not 1 <= limit <= 20:
+            return jsonify({"code": -1, "message": "limit 范围为1–20"}), 400
+
+        top_ids = client.s.get(
+            "https://hacker-news.firebaseio.com/v0/topstories.json",
+            timeout=10,
+        ).json()
+        if not isinstance(top_ids, list):
+            raise RuntimeError("Hacker News 返回了无效的头条列表")
+
         stories = []
         for sid in top_ids[:limit]:
-            item = client.s.get(f"https://hacker-news.firebaseio.com/v0/item/{sid}.json", timeout=5).json()
-            if item and item.get("type") == "story":
+            item = client.s.get(
+                f"https://hacker-news.firebaseio.com/v0/item/{sid}.json",
+                timeout=5,
+            ).json()
+            if isinstance(item, dict) and item.get("type") == "story":
                 stories.append({
                     "id": sid,
-                    "title": item.get("title", ""),
+                    "title": str(item.get("title", ""))[:500],
                     "url": item.get("url", f"https://news.ycombinator.com/item?id={sid}"),
                     "score": item.get("score", 0),
                     "by": item.get("by", "?"),
