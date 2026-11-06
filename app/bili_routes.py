@@ -193,6 +193,7 @@ def api_playurl():
 def api_audio():
     """Download an allowlisted audio stream, cap disk usage, then convert to MP3."""
     import subprocess
+    import shutil
     import tempfile
     from pathlib import Path
 
@@ -217,9 +218,9 @@ def api_audio():
     if not validate_remote_url(raw_url, allowed_suffixes=_MEDIA_HOSTS):
         return "音频地址不安全或不受支持", 502
 
-    temp_dir = tempfile.TemporaryDirectory(prefix="dsh017-audio-")
-    tmp_m4a = Path(temp_dir.name) / "source.m4a"
-    tmp_mp3 = Path(temp_dir.name) / "converted.mp3"
+    temp_dir = tempfile.mkdtemp(prefix="dsh017-audio-")
+    tmp_m4a = Path(temp_dir) / "source.m4a"
+    tmp_mp3 = Path(temp_dir) / "converted.mp3"
     retain_temp_dir = False
     upstream = None
     headers = {"User-Agent": UA, "Referer": "https://www.bilibili.com/"}
@@ -280,7 +281,9 @@ def api_audio():
             download_name=safe_title + ".mp3",
             conditional=True,
         )
-        response.call_on_close(temp_dir.cleanup)
+        response.call_on_close(
+            lambda directory=temp_dir: shutil.rmtree(directory, ignore_errors=True)
+        )
         retain_temp_dir = True
         return response
     except Exception as e:
@@ -293,7 +296,7 @@ def api_audio():
             except Exception:
                 pass
         if not retain_temp_dir:
-            temp_dir.cleanup()
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 @bili_bp.route("/api/img")
 def api_img():
