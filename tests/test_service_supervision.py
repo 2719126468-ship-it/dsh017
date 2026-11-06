@@ -22,7 +22,7 @@ class ServiceSupervisorTests(unittest.TestCase):
             fake_python = root / "fake-python"
             fake_python.write_text(
                 "#!/bin/bash\n"
-                "name=\"$(basename -- \"\${2:-unknown}\")\"\n"
+                "name=$(basename -- \"$2\")\n"
                 "printf '%s\\n' \"$name\" >> \"$FAKE_RUN_LOG\"\n"
                 "marker=\"$FAKE_RUN_DIR/$name.started\"\n"
                 "if [ ! -f \"$marker\" ]; then touch \"$marker\"; exit 17; fi\n"
@@ -97,7 +97,8 @@ class ServiceSupervisorTests(unittest.TestCase):
                 self.assertFalse((data_dir / "run" / "sidecars-supervisor.pid").exists())
 
                 for name in expected:
-                    log_name = name.replace("_server.py", "").replace("_console.py", "") + ".log"\n                    self.assertTrue((data_dir / "logs" / log_name).exists())
+                    log_name = name.replace("_server.py", "").replace("_console.py", "") + ".log"
+                    self.assertTrue((data_dir / "logs" / log_name).exists())
             finally:
                 for process in (bili, sidecars):
                     if process.poll() is None:
