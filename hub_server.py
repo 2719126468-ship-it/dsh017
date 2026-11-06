@@ -206,7 +206,7 @@ html,body{min-height:100%;margin:0;background:var(--bg);color:var(--text);
 body{padding:0 16px 48px;letter-spacing:-.015em}
 .page{width:min(100%,1040px);margin:0 auto}
 header{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:14px;
- padding:15px 0;background:color-mix(in srgb,var(--bg) 86%,transparent);
+ padding:15px 0;background:var(--bg);
  border-bottom:1px solid var(--line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
 .back{color:var(--text-2);text-decoration:none;font-size:13px;padding:8px 10px;
  border:1px solid var(--line);border-radius:10px}
