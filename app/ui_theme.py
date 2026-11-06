@@ -63,11 +63,6 @@ _THEME_CSS = r"""
   --dsh-shadow: 0 1px 2px rgba(0, 0, 0, .035);
   --dsh-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
 }
-html[data-dsh-theme="claude"],
-html[data-dsh-theme="chatgpt"] {
-  --bg: var(--bg);
-  --surface: var(--surface);
-}
 html[data-dsh-theme="claude"] body,
 html[data-dsh-theme="chatgpt"] body {
   background: var(--bg) !important;
@@ -389,7 +384,7 @@ def install_theme_support(app):
         if theme in _ALLOWED_THEMES:
             import re
             html = re.sub(
-                r"<html\\b",
+                r"<html\b",
                 '<html data-dsh-theme="' + theme + '"',
                 html,
                 count=1,
