@@ -97,7 +97,7 @@ class ServiceSupervisorTests(unittest.TestCase):
                 self.assertFalse((data_dir / "run" / "sidecars-supervisor.pid").exists())
 
                 for name in expected:
-                    self.assertTrue((data_dir / "logs" / name.replace("_server.py", "").replace("_console.py", "") + ".log").exists())
+                    log_name = name.replace("_server.py", "").replace("_console.py", "") + ".log"\n                    self.assertTrue((data_dir / "logs" / log_name).exists())
             finally:
                 for process in (bili, sidecars):
                     if process.poll() is None:
