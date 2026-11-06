@@ -784,6 +784,25 @@ html[data-dsh-theme="claude"] .mask {
   to { opacity: 1; transform: none; }
 }
 @media (max-width: 1024px) {
+  .mask {
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms ease, visibility 220ms;
+  }
+  .mask.show {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .sidebar {
+    will-change: transform;
+    transition: transform 280ms cubic-bezier(.2,.8,.2,1);
+  }
+  .sidebar.open { transform: translateX(0); }
+}
+@media (max-width: 1024px) {
   .canvas-pane {
     display: flex;
     width: 0;
