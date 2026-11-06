@@ -1242,13 +1242,252 @@ html[data-theme="dark"] .canvas-pane{
     }
   }
 
+  function removeStreamPreview(state) {
+    if(state.previewNode && state.previewNode.parentNode) {
+      state.previewNode.parentNode.removeChild(state.previewNode);
+    }
+    state.previewNode = null;
+    state.previewText = null;
+  }
+  function closeStreamFlow(state) {
+    state.paragraph = null;
+    state.list = null;
+    state.listType = null;
+    state.quote = null;
+  }
+  function createStreamCodeBlock(state, language) {
+    closeStreamFlow(state);
+    var wrap = document.createElement('div');
+    wrap.className = 'md-code md-rendered';
+    var head = document.createElement('div');
+    head.className = 'md-code-head';
+    var lang = document.createElement('span');
+    lang.textContent = language || 'CODE';
+    head.appendChild(lang);
+    wrap.appendChild(head);
+    var pre = document.createElement('pre');
+    var code = document.createElement('code');
+    state.codeTextNode = document.createTextNode('');
+    code.appendChild(state.codeTextNode);
+    pre.appendChild(code);
+    wrap.appendChild(pre);
+    state.target.appendChild(wrap);
+    state.codeCommitted = '';
+    state.inCode = true;
+  }
+  function splitStreamTableCells(row) {
+    var value = row.trim();
+    if(value.charAt(0) === '|') value = value.slice(1);
+    if(value.charAt(value.length - 1) === '|') value = value.slice(0, -1);
+    return value.split('|').map(function(cell){ return cell.trim(); });
+  }
+  function appendStreamTableRow(state, line, header) {
+    var cells = splitStreamTableCells(line);
+    var row = document.createElement('tr');
+    var count = header ? state.table.columns : state.table.columns;
+    for(var col = 0; col < count; col++) {
+      var cell = document.createElement(header ? 'th' : 'td');
+      appendInlineMarkdown(cell, cells[col] || '');
+      row.appendChild(cell);
+    }
+    (header ? state.table.head : state.table.body).appendChild(row);
+  }
+  function createStreamTable(state, headerLine) {
+    closeStreamFlow(state);
+    var wrap = document.createElement('div');
+    wrap.className = 'md-table-wrap md-rendered';
+    var table = document.createElement('table');
+    table.className = 'md-table';
+    var thead = document.createElement('thead');
+    var tbody = document.createElement('tbody');
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    state.target.appendChild(wrap);
+    state.table = {head:thead, body:tbody,
+      columns:splitStreamTableCells(headerLine).length};
+    appendStreamTableRow(state, headerLine, true);
+  }
+  function processStreamLine(state, line) {
+    var fenceStart = /^\s*```\s*([a-zA-Z0-9_+.-]*)/;
+    var fenceEnd = /^\s*```\s*$/;
+    var heading = line.match(/^\s*(#{1,3})\s+(.+)$/);
+    var unordered = /^\s*[-*+]\s+/;
+    var ordered = /^\s*\d+\.\s+/;
+    var quote = /^\s*>/;
+    var hr = /^\s*([-*_]\s*){3,}$/;
+    var tableSeparator = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+
+    if(state.inCode) {
+      if(fenceEnd.test(line)) {
+        if(state.codeCommitted.charAt(state.codeCommitted.length - 1) === '\n') {
+          state.codeCommitted = state.codeCommitted.slice(0, -1);
+        }
+        state.codeTextNode.nodeValue = state.codeCommitted;
+        state.inCode = false;
+        state.codeTextNode = null;
+        state.codeCommitted = '';
+      } else {
+        state.codeCommitted += line + '\n';
+        state.codeTextNode.nodeValue = state.codeCommitted;
+      }
+      return;
+    }
+
+    if(state.table) {
+      if(line.trim() && line.indexOf('|') !== -1 &&
+         !/^\s*(?:#{1,3}\s|[-*+]\s|\d+\.\s|>|\`\`\`)/.test(line) &&
+         !hr.test(line)) {
+        appendStreamTableRow(state, line, false);
+        return;
+      }
+      state.table = null;
+    }
+
+    if(state.tableCandidate) {
+      var candidate = state.tableCandidate;
+      state.tableCandidate = null;
+      if(tableSeparator.test(line)) {
+        createStreamTable(state, candidate);
+        return;
+      }
+      processStreamLine(state, candidate);
+    }
+
+    if(!line.trim()) {
+      closeStreamFlow(state);
+      return;
+    }
+
+    var fence = line.match(fenceStart);
+    if(fence) {
+      createStreamCodeBlock(state, fence[1]);
+      return;
+    }
+    if(heading) {
+      closeStreamFlow(state);
+      var h = document.createElement('h' + heading[1].length);
+      h.className = 'md-h md-h' + heading[1].length + ' md-rendered';
+      appendInlineMarkdown(h, heading[2]);
+      state.target.appendChild(h);
+      return;
+    }
+    if(hr.test(line)) {
+      closeStreamFlow(state);
+      var rule = document.createElement('hr');
+      rule.className = 'md-hr';
+      state.target.appendChild(rule);
+      return;
+    }
+    if(unordered.test(line) || ordered.test(line)) {
+      state.paragraph = null;
+      state.quote = null;
+      var isOrdered = ordered.test(line);
+      var listType = isOrdered ? 'ol' : 'ul';
+      if(!state.list || state.listType !== listType) {
+        state.list = document.createElement(listType);
+        state.list.className = 'md-list md-rendered';
+        state.target.appendChild(state.list);
+        state.listType = listType;
+      }
+      var item = document.createElement('li');
+      appendInlineMarkdown(item, line.replace(isOrdered ? ordered : unordered, ''));
+      state.list.appendChild(item);
+      return;
+    }
+    if(quote.test(line)) {
+      state.paragraph = null;
+      state.list = null;
+      state.listType = null;
+      if(!state.quote) {
+        state.quote = document.createElement('blockquote');
+        state.quote.className = 'md-quote md-rendered';
+        state.target.appendChild(state.quote);
+      } else {
+        state.quote.appendChild(document.createElement('br'));
+      }
+      appendInlineMarkdown(state.quote, line.replace(/^\s*>\s?/, ''));
+      return;
+    }
+
+    if(line.indexOf('|') !== -1 && !heading && !fence && !hr.test(line)) {
+      state.paragraph = null;
+      state.list = null;
+      state.listType = null;
+      state.quote = null;
+      state.tableCandidate = line;
+      return;
+    }
+
+    state.list = null;
+    state.listType = null;
+    state.quote = null;
+    if(!state.paragraph) {
+      state.paragraph = document.createElement('p');
+      state.paragraph.className = 'md-p md-rendered';
+      state.target.appendChild(state.paragraph);
+    } else {
+      state.paragraph.appendChild(document.createElement('br'));
+    }
+    appendInlineMarkdown(state.paragraph, line);
+  }
+  function updateStreamPreview(state) {
+    if(state.inCode && state.codeTextNode) {
+      state.codeTextNode.nodeValue = state.codeCommitted + state.buffer;
+      removeStreamPreview(state);
+      return;
+    }
+    if(!state.buffer) {
+      removeStreamPreview(state);
+      return;
+    }
+    if(!state.previewNode) {
+      state.previewNode = document.createElement('p');
+      state.previewNode.className = 'md-p md-rendered md-stream-pending';
+      state.previewText = document.createTextNode('');
+      state.previewNode.appendChild(state.previewText);
+      state.target.appendChild(state.previewNode);
+    }
+    state.previewText.nodeValue = state.buffer;
+  }
   function flushStreamText(state) {
-    if(state.pending && state.textNode) {
-      state.textNode.nodeValue += state.pending;
+    if(state.pending) {
+      state.buffer += state.pending;
       state.pending = '';
     }
+    state.buffer = state.buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    var newline;
+    while((newline = state.buffer.indexOf('\n')) !== -1) {
+      var line = state.buffer.slice(0, newline);
+      state.buffer = state.buffer.slice(newline + 1);
+      removeStreamPreview(state);
+      processStreamLine(state, line);
+    }
+    updateStreamPreview(state);
     state.queued = false;
     if(autoFollow) scrollBottom();
+  }
+  function finalizeStreamMarkdown(state) {
+    removeStreamPreview(state);
+    if(state.buffer) {
+      var finalLine = state.buffer;
+      state.buffer = '';
+      processStreamLine(state, finalLine);
+    }
+    if(state.tableCandidate) {
+      var candidate = state.tableCandidate;
+      state.tableCandidate = null;
+      processStreamLine(state, candidate);
+    }
+    if(state.inCode && state.codeTextNode) {
+      if(state.codeCommitted.charAt(state.codeCommitted.length - 1) === '\n') {
+        state.codeCommitted = state.codeCommitted.slice(0, -1);
+      }
+      state.codeTextNode.nodeValue = state.codeCommitted;
+      state.inCode = false;
+      state.codeTextNode = null;
+      state.codeCommitted = '';
+    }
   }
   function queueStreamText(state, chunk) {
     state.pending += chunk;
@@ -1446,7 +1685,7 @@ html[data-theme="dark"] .canvas-pane{
     var assistantRow = null;
     var fullText = '';
     var thinkShown = false;
-    var streamState = {textNode:null, pending:'', queued:false};
+    var streamState = {pending:'', queued:false, buffer:'', target:null, previewNode:null, previewText:null, paragraph:null, list:null, listType:null, quote:null, inCode:false, codeTextNode:null, codeCommitted:'', tableCandidate:null, table:null};
     var streamCompleted = false;
 
     try{
@@ -1537,8 +1776,7 @@ html[data-theme="dark"] .canvas-pane{
                 assistantRow.className = 'msg-row assistant';
                 var body = document.createElement('div');
                 body.className = 'msg-body streaming-text';
-                streamState.textNode = document.createTextNode('');
-                body.appendChild(streamState.textNode);
+                streamState.target = body;
                 var cursor = document.createElement('span');
                 cursor.className = 'cursor';
                 cursor.setAttribute('aria-hidden', 'true');
@@ -1556,6 +1794,7 @@ html[data-theme="dark"] .canvas-pane{
       }
 
       if(streamState.queued) flushStreamText(streamState);
+      finalizeStreamMarkdown(streamState);
       streamCompleted = true;
       if(typing.parentNode) typing.remove();
       if(!assistantRow && typing.querySelector('.think-panel')) {
@@ -1579,6 +1818,7 @@ html[data-theme="dark"] .canvas-pane{
     }catch(e){
       if(typing.parentNode) typing.remove();
       if(streamState.queued) flushStreamText(streamState);
+      finalizeStreamMarkdown(streamState);
       if(assistantRow) {
         var partial = assistantRow.querySelector('.msg-body');
         if(partial) partial.textContent = fullText;
