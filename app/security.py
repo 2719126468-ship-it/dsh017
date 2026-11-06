@@ -32,6 +32,72 @@ def validate_remote_url(url, allowed_suffixes=()):
 
 
 
+def validate_provider_url(url):
+    """Allow HTTPS public providers and HTTP loopback-only local gateways.
+
+    All DNS answers must be globally routable. Redirects are disabled by the
+    caller so a validated provider cannot redirect requests to another host.
+    """
+    if not isinstance(url, str) or not url or len(url) > 2048:
+        return False
+    if any(ord(ch) < 32 or ch.isspace() for ch in url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        scheme = parsed.scheme.lower()
+        host = (parsed.hostname or "").rstrip(".").lower()
+        port = parsed.port
+        if (
+            not host
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            return False
+
+        if scheme == "http":
+            try:
+                return ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                if host != "localhost":
+                    return False
+                infos = socket.getaddrinfo(
+                    host, port or 80, type=socket.SOCK_STREAM
+                )
+                addresses = {
+                    ipaddress.ip_address(item[4][0].split("%", 1)[0])
+                    for item in infos
+                }
+                return bool(addresses) and all(
+                    address.is_loopback for address in addresses
+                )
+
+        if scheme != "https":
+            return False
+
+        try:
+            addresses = {ipaddress.ip_address(host)}
+        except ValueError:
+            infos = socket.getaddrinfo(
+                host, port or 443, type=socket.SOCK_STREAM
+            )
+            addresses = {
+                ipaddress.ip_address(item[4][0].split("%", 1)[0])
+                for item in infos
+            }
+        return bool(addresses) and all(
+            address.is_global
+            and not address.is_multicast
+            and not address.is_unspecified
+            and not address.is_loopback
+            and not address.is_link_local
+            for address in addresses
+        )
+    except (OSError, ValueError, socket.gaierror):
+        return False
+
+
 _SAFE_IMAGE_CONTENT_TYPES = frozenset({
     "image/jpeg",
     "image/png",

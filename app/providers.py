@@ -18,6 +18,7 @@ from flask import Blueprint, jsonify, request, Response
 
 from app.bili_client import client
 from app.db import _DATA_DIR
+from app.security import validate_provider_url
 
 provider_bp = Blueprint("providers", __name__)
 _LOCK = threading.RLock()
@@ -79,7 +80,13 @@ def _normalise_base_url(raw):
         or parsed.fragment
     ):
         raise ValueError("Base URL 必须是无账号密码、无查询参数的 HTTP(S) 地址")
-    return urlunsplit((parsed.scheme.lower(), parsed.netloc, parsed.path.rstrip("/"), "", ""))
+    normalized = urlunsplit((parsed.scheme.lower(), parsed.netloc, parsed.path.rstrip("/"), "", ""))
+    if not validate_provider_url(normalized):
+        raise ValueError(
+            "供应商地址不安全：远程服务必须使用解析到公网地址的 HTTPS；"
+            "HTTP 仅允许本机 loopback 网关"
+        )
+    return normalized
 
 
 def _clean_models(raw):
@@ -294,7 +301,14 @@ def fetch_provider_models(provider_id):
     headers = {"Accept": "application/json"}
     if key:
         headers["Authorization"] = "Bearer " + key
-    response = client.s.get(_models_url(provider["base_url"]), headers=headers, timeout=(5, 15))
+    if not validate_provider_url(provider["base_url"]):
+        raise ValueError("供应商地址未通过出站安全校验")
+    response = client.s.get(
+        _models_url(provider["base_url"]),
+        headers=headers,
+        timeout=(5, 15),
+        allow_redirects=False,
+    )
     if response.status_code < 200 or response.status_code >= 300:
         raise RuntimeError("HTTP %d: %s" % (response.status_code, response.text[:240]))
     payload = response.json()
@@ -318,6 +332,8 @@ def resolve_provider(provider_id, model):
         raise ValueError("模型 ID 无效")
     if model not in provider["models"]:
         raise ValueError("该模型未列入此供应商的允许模型列表")
+    if not validate_provider_url(provider["base_url"]):
+        raise ValueError("供应商地址未通过出站安全校验")
     key = get_provider_secret(provider["id"])
     host = (urlsplit(provider["base_url"]).hostname or "").lower()
     local_no_key = host in {"127.0.0.1", "localhost", "::1"}

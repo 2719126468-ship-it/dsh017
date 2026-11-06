@@ -17,6 +17,8 @@ class ProviderRegistryTests(unittest.TestCase):
         self.secrets_patch = patch.object(providers, "_SECRETS_PATH", self.secrets_path)
         self.config_patch.start()
         self.secrets_patch.start()
+        self.url_validation_patch = patch.object(providers, "validate_provider_url", return_value=True)
+        self.url_validation_patch.start()
         self.runtime_before = dict(providers._RUNTIME_SECRETS)
         providers._RUNTIME_SECRETS.clear()
 
@@ -25,6 +27,7 @@ class ProviderRegistryTests(unittest.TestCase):
         providers._RUNTIME_SECRETS.update(self.runtime_before)
         self.config_patch.stop()
         self.secrets_patch.stop()
+        self.url_validation_patch.stop()
         self.temp.cleanup()
 
     def test_provider_key_is_not_exposed_and_is_stored_in_private_file(self):
@@ -127,6 +130,7 @@ class ProviderRegistryTests(unittest.TestCase):
             get.call_args.kwargs["headers"]["Authorization"],
             "Bearer secret-value",
         )
+        self.assertIs(get.call_args.kwargs["allow_redirects"], False)
 
 
 if __name__ == "__main__":

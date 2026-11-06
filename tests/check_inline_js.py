@@ -1,33 +1,53 @@
-"""Syntax-check embedded JavaScript used by the mobile web interfaces."""
+"""Syntax-check inline JavaScript in the Shorts and Chat UI pages using Node.js."""
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from app.chat_ui import CHAT_HTML
 
 node = shutil.which("node")
 if not node:
     raise SystemExit("Node.js is required for inline JavaScript syntax checks")
 
-sources = {
-    "Shorts": ("app/shorts_routes.py", r'SHORTS_HTML\s*=\s*r?"""(.*?)"""'),
-    "Workspace": ("app/workspace_ui.py", r"WORKSPACE_HTML\s*=\s*r?'''(.*?)'''"),
-    "Providers": ("app/providers.py", r"PROVIDERS_HTML\s*=\s*r?'''(.*?)'''"),
-}
+shorts_source = (ROOT / "app/shorts_routes.py").read_text(encoding="utf-8")
+shorts_match = re.search(
+    r'SHORTS_HTML\s*=\s*r?""".*?<script>(.*?)</script>',
+    shorts_source,
+    re.S,
+)
+if not shorts_match:
+    raise SystemExit("Could not locate Shorts inline script")
 
-for label, (filename, html_pattern) in sources.items():
-    source = Path(filename).read_text(encoding="utf-8")
-    html_match = re.search(html_pattern, source, re.S)
-    if not html_match:
-        raise SystemExit("Could not locate %s HTML template" % label)
-    scripts = re.findall(r"<script[^>]*>(.*?)</script>", html_match.group(1), re.S)
-    if not scripts:
-        raise SystemExit("Could not locate %s inline JavaScript" % label)
-    for index, script in enumerate(scripts, 1):
-        with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as handle:
-            handle.write(script)
-            path = handle.name
-        try:
-            subprocess.run([node, "--check", path], check=True)
-        finally:
-            Path(path).unlink(missing_ok=True)
+chat_scripts = re.findall(
+    r"<script(?:\s[^>]*)?>(.*?)</script\s*>",
+    CHAT_HTML,
+    re.S | re.I,
+)
+if not chat_scripts:
+    raise SystemExit("Could not locate Chat UI inline scripts")
+
+scripts = [("Shorts inline script", shorts_match.group(1))]
+scripts.extend(
+    (f"Chat UI inline script {index}", source)
+    for index, source in enumerate(chat_scripts, 1)
+)
+
+for label, source in scripts:
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".js", encoding="utf-8", delete=False
+    ) as handle:
+        handle.write(source)
+        path = handle.name
+    try:
+        subprocess.run([node, "--check", path], check=True)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"JavaScript syntax check failed: {label}") from exc
+    finally:
+        Path(path).unlink(missing_ok=True)
+    print(f"JavaScript syntax OK: {label}")

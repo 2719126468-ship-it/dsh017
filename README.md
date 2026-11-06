@@ -7,7 +7,7 @@
 
 - **B 站播放器**：WBI 签名搜索 / 播放 / 下载 / 多P / 收藏 / 进度
 - **短视频流**：Scroll-Snap 全屏吸附 + 双击点赞
-- **AI 聊天**：GLM-4.7-Flash 流式 + 预设 + 思考面板
+- **AI 聊天**：多供应商 OpenAI 兼容流式接口 + 预设 + 思考面板
 - **AI 视频总结**：视觉 + 文本双引擎
 - **工作区**：文件 CRUD + AI 改文件 + 5 层权限闸门
 - **塔罗 3D 翻牌**：22 张大阿卡纳 + 正逆位
@@ -155,6 +155,14 @@ GitHub Actions 会在 push、PR 和手动触发时运行 Python 3.10–3.12 测�
 └── presets/               聊天预设（公开 3 个）
 ```
 
+
+### AI 模型供应商
+
+聊天与工作区 AI 共用供应商注册表，支持 OpenAI Chat Completions 兼容接口、自定义 Base URL、模型列表和 `/models` 自动发现。预设包含 OpenAI、DeepSeek、Z.ai/GLM、Kimi、Qwen、MiniMax、OpenRouter、SiliconFlow、Ollama、LM Studio 和 Magpie Gateway。
+
+远程供应商必须使用 HTTPS，且 DNS 返回的所有地址都必须是公网地址；HTTP 仅允许 `localhost` / loopback 本地网关。模型探测与聊天请求均禁用 HTTP 重定向，避免已验证地址跳转到其他主机。供应商密钥不会通过配置列表回显；Android APK 使用 Android Keystore 加密保存密钥。
+
+Magpie 目前以 Gateway 方式接入：先在 Magpie 自己的客户端完成登录，再将 Gateway 地址和 Key 配置到 DSH。DSH 尚未实现代替 Magpie/Qoder 的浏览器 OAuth 登录或读取其登录 Cookie；不要把网站 Cookie 当成 Gateway Key 粘贴。
 
 ## 已知限制
 
