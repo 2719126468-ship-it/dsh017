@@ -76,7 +76,7 @@ def api_x():
     parsed = urlsplit(url)
     if (parsed.scheme != "https" or (parsed.hostname or "").lower() not in
             ("x.com", "www.x.com", "twitter.com", "www.twitter.com") or
-            not re.fullmatch(r"/[^/]+/status/\\d+/?", parsed.path)):
+            not re.fullmatch(r"/[^/]+/status/\d+/?", parsed.path)):
         return jsonify({"code": -1, "message": "仅支持有效的 X/Twitter 推文链接"}), 400
     if parsed.query or parsed.fragment:
         return jsonify({"code": -1, "message": "推文链接不能包含额外参数"}), 400

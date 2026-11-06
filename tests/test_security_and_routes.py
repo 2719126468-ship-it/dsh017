@@ -91,6 +91,15 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         get.assert_not_called()
 
+    def test_x_proxy_accepts_valid_status_url_and_rewrites_host(self):
+        mock_response = type("Response", (), {"json": lambda self: {"code": 404}})()
+        with patch("app.chat_routes.client.s.get", return_value=mock_response) as get:
+            self.client.get("/api/x?url=https://x.com/user/status/123")
+        get.assert_called_once_with(
+            "https://api.fxtwitter.com/user/status/123",
+            timeout=(5, 15), allow_redirects=False
+        )
+
     def test_x_proxy_rejects_non_x_url_before_network(self):
         with patch("app.chat_routes.client.s.get") as get:
             response = self.client.get("/api/x?url=https://example.com/user/status/123")

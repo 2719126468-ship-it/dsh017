@@ -9,9 +9,7 @@ node = shutil.which("node")
 if not node:
     raise SystemExit("Node.js is required for inline JavaScript syntax checks")
 source = Path("app/shorts_routes.py").read_text(encoding="utf-8")
-match = re.search(r'SHORTS_HTML\\s*=\\s*r?""" .*?<script>(.*?)</script>', source, re.S)
-if not match:
-    match = re.search(r'SHORTS_HTML\\s*=\\s*r?""".*?<script>(.*?)</script>', source, re.S)
+match = re.search(r'SHORTS_HTML\s*=\s*r?""".*?<script>(.*?)</script>', source, re.S)
 if not match:
     raise SystemExit("Could not locate Shorts inline script")
 with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as handle:
