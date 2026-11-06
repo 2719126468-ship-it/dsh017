@@ -1326,7 +1326,7 @@ def install_theme_support(app):
         if mode in {"light", "dark"}:
             attrs += ' data-dsh-mode="' + mode + '" data-theme="' + mode + '"'
         if attrs:
-            html = re.sub(r"<html\\b", "<html" + attrs, html, count=1, flags=re.IGNORECASE)
+            html = re.sub(r"<html\b", "<html" + attrs, html, count=1, flags=re.IGNORECASE)
 
         head_pos = html.lower().find("</head>")
         body_pos = html.lower().rfind("</body>")
