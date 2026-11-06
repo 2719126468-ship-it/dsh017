@@ -1265,7 +1265,7 @@ _THEME_WIDGET = r"""
     themeSelect.addEventListener("change",function(){applyTheme(themeSelect.value,true);});
     modeSelect.addEventListener("change",function(){applyMode(modeSelect.value,true);});
     document.addEventListener("keydown",function(event){
-      if(event.key==="Escape"&&panel.classList.contains("open")) setPanelOpen(false,true);
+      if(event.key === "Escape" && panel.classList.contains("open")) setPanelOpen(false,true);
     });
     document.addEventListener("click",function(event){
       if(panel.classList.contains("open")&&!event.target.closest("#dsh017-theme-switcher")) setPanelOpen(false,false);
