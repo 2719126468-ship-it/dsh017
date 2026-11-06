@@ -204,7 +204,7 @@ STATS_HTML = r'''<!DOCTYPE html>
 html,body{min-height:100%;margin:0;background:var(--bg);color:var(--text);
  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}
 body{padding:0 16px 48px;letter-spacing:-.015em}
-.page{width:min(100%,1040px);margin:0 auto}
+.page{width:100%;max-width:1040px;margin:0 auto}
 header{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:14px;
  padding:15px 0;background:var(--bg);
  border-bottom:1px solid var(--line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
