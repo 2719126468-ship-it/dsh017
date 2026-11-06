@@ -319,7 +319,9 @@ def resolve_provider(provider_id, model):
     if model not in provider["models"]:
         raise ValueError("该模型未列入此供应商的允许模型列表")
     key = get_provider_secret(provider["id"])
-    if not key:
+    host = (urlsplit(provider["base_url"]).hostname or "").lower()
+    local_no_key = host in {"127.0.0.1", "localhost", "::1"}
+    if not key and not local_no_key:
         raise ValueError("尚未配置该供应商的 API Key")
     endpoint = provider["base_url"]
     if endpoint.endswith("/chat/completions"):
