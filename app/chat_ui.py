@@ -1346,11 +1346,16 @@ html[data-theme="dark"] .canvas-pane{
 
   /* ================= 请求流式 ================= */
   async function requestStream(){
-    busy = true; sendBtn.disabled = true;
+    mobileRefocusAfterStream = document.activeElement === input && window.innerWidth > 768;
+    busy = true;
+    sendBtn.disabled = true;
+    composer.classList.add('is-streaming');
+    composer.setAttribute('aria-busy', 'true');
+    autoFollow = isNearBottom();
 
-    // 思考中占位
     var typing = document.createElement('div');
     typing.className = 'typing';
+    typing.setAttribute('aria-label', '正在生成回复');
     typing.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
     msgs.appendChild(typing);
     scrollBottom();
@@ -1358,7 +1363,7 @@ html[data-theme="dark"] .canvas-pane{
     var assistantRow = null;
     var fullText = '';
     var thinkShown = false;
-    var failed = false;
+    var streamState = {textNode:null, pending:'', queued:false};
 
     try{
       var resp = await fetch('/api/chat', {
@@ -1390,12 +1395,14 @@ html[data-theme="dark"] .canvas-pane{
           try{
             var j = JSON.parse(payload);
             if(j.error) throw new Error(typeof j.error === 'string' ? j.error : JSON.stringify(j.error));
-            // workspace_edit 事件
+            if(j.info) {
+              typing.setAttribute('aria-label', j.info);
+              continue;
+            }
             if((j.type === 'artifact_card' || j.type === 'pane_update') && j.data){
               handleArtifact(j.type, j.data);
               continue;
             }
-            // 兼容旧事件
             if(j.type === 'workspace_edit' && j.data){
               handleArtifact('artifact_card', j.data);
               continue;
@@ -1406,40 +1413,31 @@ html[data-theme="dark"] .canvas-pane{
             }
             var delta = j.choices && j.choices[0] && j.choices[0].delta;
             if(delta && delta.reasoning_content){
-              if(!assistantRow){
-                if(!thinkShown){
-                  thinkShown = true;
-                  typing.innerHTML = '';
-                  var tp = document.createElement('div');
-                  tp.className = 'think-panel';
-                  tp.innerHTML = '<div class="think-head"><span class="arrow">▸</span>思考中 <span class="tlen">(0 字)</span></div><div class="think-body"></div>';
-                  typing.appendChild(tp);
-                  tp.querySelector('.think-head').onclick = function(){
-                    var isOpen = tp.classList.contains('open');
-                    if(isOpen){
-                      tp.classList.remove('open');
-                      tp.classList.add('collapsed');
-                    } else {
-                      tp.classList.remove('collapsed');
-                      tp.classList.add('open');
-                    }
-                  };
-                  var tb = tp.querySelector('.think-body');
-                  tb.textContent = '';
-                  window._thinkText = '';
-                  window._thinkBody = tb;
-                  window._thinkLen = tp.querySelector('.tlen');
-                }
+              if(!thinkShown && !assistantRow){
+                thinkShown = true;
+                typing.innerHTML = '';
+                var tp = document.createElement('div');
+                tp.className = 'think-panel';
+                tp.innerHTML = '<div class="think-head"><span class="arrow">▸</span>思考中 <span class="tlen">(0 字)</span></div><div class="think-body"></div>';
+                typing.appendChild(tp);
+                tp.querySelector('.think-head').onclick = function(){
+                  var isOpen = tp.classList.contains('open');
+                  tp.classList.toggle('open', !isOpen);
+                  tp.classList.toggle('collapsed', isOpen);
+                };
+                window._thinkText = '';
+                window._thinkBody = tp.querySelector('.think-body');
+                window._thinkLen = tp.querySelector('.tlen');
               }
               if(window._thinkBody){
                 window._thinkText += delta.reasoning_content;
                 window._thinkBody.textContent = window._thinkText;
                 window._thinkLen.textContent = '(' + window._thinkText.length + ' 字)';
+                if(autoFollow) scrollBottom();
               }
             }
             if(delta && delta.content){
               if(!assistantRow){
-                // 先把思考面板从 typing 里摘出来，保留在消息流里
                 var tpEl = typing.querySelector('.think-panel');
                 if(tpEl){
                   tpEl.classList.add('collapsed');
@@ -1448,31 +1446,24 @@ html[data-theme="dark"] .canvas-pane{
                   msgs.insertBefore(tpEl, typing);
                 }
                 if(typing.parentNode) typing.remove();
-                window._thinkBody = null; window._thinkLen = null;
+                window._thinkBody = null;
+                window._thinkLen = null;
+
                 assistantRow = document.createElement('div');
                 assistantRow.className = 'msg-row assistant';
                 var body = document.createElement('div');
-                body.className = 'msg-body';
+                body.className = 'msg-body streaming-text';
+                streamState.textNode = document.createTextNode('');
+                body.appendChild(streamState.textNode);
+                var cursor = document.createElement('span');
+                cursor.className = 'cursor';
+                cursor.setAttribute('aria-hidden', 'true');
+                body.appendChild(cursor);
                 assistantRow.appendChild(body);
                 msgs.appendChild(assistantRow);
               }
               fullText += delta.content;
-              var bodyEl = assistantRow.querySelector('.msg-body');
-              // 清空并重新渲染为逐词 span
-              bodyEl.innerHTML = '';
-              var words = fullText.split(/(\s+)/);
-              words.forEach(function(w, wi) {
-                if(!w.trim()) { bodyEl.appendChild(document.createTextNode(w)); return; }
-                var sp = document.createElement('span');
-                sp.textContent = w;
-                sp.style.animationDelay = (wi * 0.03) + 's';
-                bodyEl.appendChild(sp);
-                bodyEl.appendChild(document.createTextNode(' '));
-              });
-              var cur = document.createElement('span');
-              cur.className = 'cursor';
-              bodyEl.appendChild(cur);
-              scrollBottom();
+              queueStreamText(streamState, delta.content);
             }
           }catch(pe){
             if(pe.message && pe.message.indexOf('error') !== -1) throw pe;
@@ -1480,22 +1471,26 @@ html[data-theme="dark"] .canvas-pane{
         }
       }
 
+      if(streamState.queued) flushStreamText(streamState);
       if(typing.parentNode) typing.remove();
 
       if(assistantRow){
         var bodyEl2 = assistantRow.querySelector('.msg-body');
-        bodyEl2.textContent = fullText;
+        renderAssistantMarkdown(bodyEl2, fullText);
         history.push({role:'assistant', content: fullText, fresh: true});
-        // 重新渲染操作栏（保留流式内容）
         var idx = history.length - 1;
         assistantRow.dataset.idx = idx;
         attachAssistantActions(assistantRow, fullText, idx);
         assistantRow.classList.add('show-actions');
-        setTimeout(function(){ assistantRow.classList.remove('show-actions'); }, 3000);
+        setTimeout(function(){ assistantRow.classList.remove('show-actions'); }, 2800);
       }
     }catch(e){
-      failed = true;
       if(typing.parentNode) typing.remove();
+      if(streamState.queued) flushStreamText(streamState);
+      if(assistantRow) {
+        var partial = assistantRow.querySelector('.msg-body');
+        if(partial) partial.textContent = fullText;
+      }
       var errRow = document.createElement('div');
       errRow.className = 'msg-row assistant';
       var errBody = document.createElement('div');
@@ -1506,8 +1501,11 @@ html[data-theme="dark"] .canvas-pane{
       msgs.appendChild(errRow);
       scrollBottom();
     }finally{
-      busy = false; sendBtn.disabled = false;
-      input.focus();
+      busy = false;
+      sendBtn.disabled = false;
+      composer.classList.remove('is-streaming');
+      composer.removeAttribute('aria-busy');
+      if(mobileRefocusAfterStream) input.focus();
     }
   }
 
@@ -1564,6 +1562,8 @@ html[data-theme="dark"] .canvas-pane{
     input.style.height = '44px';
     history.push({role:'user', content:text});
     renderAll();
+    autoFollow = true;
+    scrollBottom(true);
     await requestStream();
   }
 
@@ -1594,7 +1594,7 @@ html[data-theme="dark"] .canvas-pane{
     renderAll();
     input.value = '';
     input.style.height = '44px';
-    input.focus();
+    if(window.innerWidth > 768) input.focus();
   }
 
   /* ================= 绑定 ================= */
