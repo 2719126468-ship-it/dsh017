@@ -171,6 +171,8 @@ def _db_init_workspace():
         columns = {row["name"] for row in c.execute("PRAGMA table_info(workspace_files)").fetchall()}
         if "workspace_id" not in columns:
             c.execute("ALTER TABLE workspace_files ADD COLUMN workspace_id TEXT")
+        if "kind" not in columns:
+            c.execute("ALTER TABLE workspace_files ADD COLUMN kind TEXT NOT NULL DEFAULT 'file'")
         now = int(time.time())
         c.execute(
             "INSERT OR IGNORE INTO workspace_projects(id,name,description,created_at,updated_at) "
