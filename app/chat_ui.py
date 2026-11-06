@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """Chat UI：/api/chat 流式 + CHAT_HTML + /chat 页面"""
 import os
+import codecs
 import json
 import time
 import urllib.parse
@@ -10,6 +11,20 @@ from app.llm_config import ZHIPU_API_KEY, ZHIPU_BASE, ZHIPU_MODEL
 from app.bili_client import client
 
 chat_ui_bp = Blueprint('chat_ui', __name__)
+
+
+def _iter_utf8_text(chunks):
+    """Incrementally decode upstream byte chunks without dropping split UTF-8 characters."""
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    for chunk in chunks:
+        if not chunk:
+            continue
+        decoded = decoder.decode(chunk, final=False)
+        if decoded:
+            yield decoded
+    tail = decoder.decode(b"", final=True)
+    if tail:
+        yield tail
 
 _MAX_CHAT_MESSAGES = 100
 _MAX_CHAT_CHARS = 200_000
@@ -247,10 +262,9 @@ def api_chat():
                                     {"type": event_type, "data": val},
                                     ensure_ascii=False) + "\n\n"
 
-                for ch in r.iter_content(chunk_size=None, decode_unicode=False):
-                    if not ch:
+                for txt in _iter_utf8_text(r.iter_content(chunk_size=None, decode_unicode=False)):
+                    if not txt:
                         continue
-                    txt = ch.decode("utf-8", "ignore")
                     line_buf += txt
                     if not first_chunk_checked and line_buf:
                         first_chunk_checked = True
@@ -1480,8 +1494,8 @@ html[data-theme="dark"] .canvas-pane{
           return;
         }
         if(j.type === 'error') {
-          var message = typeof j.message === 'string' && j.message ? j.message : '服务端处理失败';
-          throw new Error(message);
+          console.warn('workspace error:', j.message);
+          return;
         }
 
         var delta = j.choices && j.choices[0] && j.choices[0].delta;
