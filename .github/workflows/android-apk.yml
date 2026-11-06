@@ -77,3 +77,54 @@ jobs:
           path: dist/DSH017-${{ matrix.artifact }}.apk
           if-no-files-found: error
           retention-days: 30
+
+  publish-release:
+    name: Publish GitHub Release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download both APK variants
+        uses: actions/download-artifact@v4
+        with:
+          pattern: DSH017-*
+          merge-multiple: true
+          path: dist
+
+      - name: Verify release files and generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s dist/DSH017-ARMv7-32bit.apk
+          test -s dist/DSH017-ARM64-64bit.apk
+          (cd dist && sha256sum DSH017-ARMv7-32bit.apk DSH017-ARM64-64bit.apk > SHA256SUMS.txt)
+          ls -lh dist
+          cat dist/SHA256SUMS.txt
+
+      - name: Publish versioned release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.0
+          name: DSH017 Android v0.1.0
+          target_commitish: ${{ github.sha }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
+          body: |
+            DSH017 standalone Android WebView app.
+
+            - Android 8.1+ (API 27).
+            - Install the ARM64 APK on 64-bit ARM devices.
+            - Install the ARMv7 APK on 32-bit ARM devices.
+            - Configure your own Zhipu API key in the app. No provider key is bundled.
+            - The embedded services bind to loopback; SQLite and chat history stay in app-private storage.
+
+            See [Android installation notes](https://github.com/2719126468-ship-it/dsh017/blob/main/android-app/README.md).
+          files: |
+            dist/DSH017-ARMv7-32bit.apk
+            dist/DSH017-ARM64-64bit.apk
+            dist/SHA256SUMS.txt
