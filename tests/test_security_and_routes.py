@@ -83,6 +83,20 @@ class RouteTests(unittest.TestCase):
         non_object = self.client.post("/api/workspace/apply_edit", json=["not", "an", "object"])
         self.assertEqual(non_object.status_code, 400)
 
+    def test_workspace_rejects_invalid_edit_field_types_before_database_access(self):
+        cases = [
+            {"file_id": "1", "base_version": 1, "mode": "ask"},
+            {"file_id": True, "base_version": 1, "mode": "ask"},
+            {"file_id": 1, "base_version": "1", "mode": "ask"},
+            {"file_id": 1, "base_version": 1, "old_str": [], "mode": "ask"},
+            {"file_id": 1, "base_version": 1, "new_str": {}, "mode": "ask"},
+        ]
+        with patch("app.workspace_routes._db_conn") as db_conn:
+            for payload in cases:
+                response = self.client.post("/api/workspace/apply_edit", json=payload)
+                self.assertEqual(response.status_code, 400, repr(payload))
+            db_conn.assert_not_called()
+
     def test_shorts_rejects_invalid_page(self):
         response = self.client.get("/api/shorts?q=test&page=0")
         self.assertEqual(response.status_code, 400)
