@@ -302,6 +302,9 @@ public class MainActivity extends Activity {
     private final class ProviderKeyBridge {
         @JavascriptInterface
         public boolean save(String providerId, String apiKey) {
+            String page = webView == null ? "" : String.valueOf(webView.getUrl());
+            if (!page.startsWith("http://127.0.0.1:8092/providers")) return false;
+            if (providerId == null || apiKey == null || apiKey.length() > 4096) return false;
             if (!apiKeyStore.saveProviderKey(providerId, apiKey)) return false;
             backendExecutor.execute(() -> {
                 try {
