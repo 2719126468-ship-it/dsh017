@@ -122,8 +122,9 @@ class ProviderRegistryTests(unittest.TestCase):
         with patch.object(providers, "provider_request", return_value=response) as get:
             models = providers.fetch_provider_models("sample-provider")
         self.assertEqual(models, ["model-a", "model-z"])
+        self.assertEqual(get.call_args.args[0], "GET")
         self.assertEqual(
-            get.call_args.args[0],
+            get.call_args.args[1],
             "https://api.example.test/v1/models",
         )
         self.assertEqual(
