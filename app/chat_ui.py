@@ -1308,6 +1308,19 @@ html[data-theme="dark"] .canvas-pane{
       columns:splitStreamTableCells(headerLine).length};
     appendStreamTableRow(state, headerLine, true);
   }
+  function appendStreamParagraphLine(state, line) {
+    state.list = null;
+    state.listType = null;
+    state.quote = null;
+    if(!state.paragraph) {
+      state.paragraph = document.createElement('p');
+      state.paragraph.className = 'md-p md-rendered';
+      state.target.appendChild(state.paragraph);
+    } else {
+      state.paragraph.appendChild(document.createElement('br'));
+    }
+    appendInlineMarkdown(state.paragraph, line);
+  }
   function processStreamLine(state, line) {
     var fenceStart = /^\s*```\s*([a-zA-Z0-9_+.-]*)/;
     var fenceEnd = /^\s*```\s*$/;
@@ -1351,7 +1364,7 @@ html[data-theme="dark"] .canvas-pane{
         createStreamTable(state, candidate);
         return;
       }
-      processStreamLine(state, candidate);
+      appendStreamParagraphLine(state, candidate);
     }
 
     if(!line.trim()) {
@@ -1419,17 +1432,7 @@ html[data-theme="dark"] .canvas-pane{
       return;
     }
 
-    state.list = null;
-    state.listType = null;
-    state.quote = null;
-    if(!state.paragraph) {
-      state.paragraph = document.createElement('p');
-      state.paragraph.className = 'md-p md-rendered';
-      state.target.appendChild(state.paragraph);
-    } else {
-      state.paragraph.appendChild(document.createElement('br'));
-    }
-    appendInlineMarkdown(state.paragraph, line);
+    appendStreamParagraphLine(state, line);
   }
   function updateStreamPreview(state) {
     if(state.inCode && state.codeTextNode) {
@@ -1477,7 +1480,7 @@ html[data-theme="dark"] .canvas-pane{
     if(state.tableCandidate) {
       var candidate = state.tableCandidate;
       state.tableCandidate = null;
-      processStreamLine(state, candidate);
+      appendStreamParagraphLine(state, candidate);
     }
     if(state.inCode && state.codeTextNode) {
       if(state.codeCommitted.charAt(state.codeCommitted.length - 1) === '\n') {
