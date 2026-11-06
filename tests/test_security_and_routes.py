@@ -32,4 +32,77 @@ class SecurityTests(unittest.TestCase):
 
 
 class WorkspaceTests(unittest.TestCase):
-  ¶»§q«^
+    def test_filename_scope_rejects_traversal_and_paths(self):
+        for value in ("../secret", "a/b", r"a\b", "/etc/passwd", "..", ""):
+            self.assertFalse(_ws_scope_check(value), value)
+        self.assertTrue(_ws_scope_check("notes.md"))
+
+    @patch("app.workspace_routes._db_conn")
+    def test_missing_rule_defaults_to_ask(self, db_conn):
+        conn = db_conn.return_value
+        conn.execute.return_value.fetchall.return_value = []
+        self.assertEqual(_ws_rule_lookup("notes.md", "edit"), "ask")
+        conn.close.assert_called_once()
+
+    def test_auto_guard_is_thread_safe_and_trips(self):
+        import app.workspace_routes as ws
+        with ws._AUTO_GUARD_LOCK:
+            ws._AUTO_BLOCK_STREAK = 0
+            ws._AUTO_DOWNGRADED = False
+        for _ in range(ws._AUTO_BLOCK_THRESHOLD):
+            _ws_auto_on_block()
+        self.assertTrue(_ws_auto_guard())
+        with ws._AUTO_GUARD_LOCK:
+            ws._AUTO_BLOCK_STREAK = 0
+            ws._AUTO_DOWNGRADED = False
+
+
+class RouteTests(unittest.TestCase):
+    def setUp(self):
+        self.app = Flask(__name__)
+        self.app.register_blueprint(bili_bp)
+        self.app.register_blueprint(shorts_bp)
+        self.app.register_blueprint(chat_bp)
+        self.client = self.app.test_client()
+
+    def test_search_exception_returns_500_json_without_logger_nameerror(self):
+        with patch("app.bili_routes.client.search", side_effect=RuntimeError("offline")):
+            response = self.client.get("/api/search?q=test")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["code"], -500)
+
+    def test_shorts_rejects_invalid_page(self):
+        response = self.client.get("/api/shorts?q=test&page=0")
+        self.assertEqual(response.status_code, 400)
+
+    def test_shorts_rejects_long_keyword(self):
+        response = self.client.get("/api/shorts?q=" + "x" * 101)
+        self.assertEqual(response.status_code, 400)
+
+    def test_proxy_rejects_untrusted_url_before_network(self):
+        with patch("app.bili_routes.client.s.get") as get:
+            response = self.client.get("/api/proxy?u=http://127.0.0.1/admin")
+        self.assertEqual(response.status_code, 400)
+        get.assert_not_called()
+
+    def test_image_proxy_rejects_untrusted_url_before_network(self):
+        with patch("app.bili_routes.client.s.get") as get:
+            response = self.client.get("/api/img?u=https://example.com/image.png")
+        self.assertEqual(response.status_code, 400)
+        get.assert_not_called()
+
+    def test_x_proxy_rejects_non_x_url_before_network(self):
+        with patch("app.chat_routes.client.s.get") as get:
+            response = self.client.get("/api/x?url=https://example.com/user/status/123")
+        self.assertEqual(response.status_code, 400)
+        get.assert_not_called()
+
+    def test_x_proxy_rejects_x_url_with_extra_query(self):
+        with patch("app.chat_routes.client.s.get") as get:
+            response = self.client.get("/api/x?url=https://x.com/user/status/123?foo=bar")
+        self.assertEqual(response.status_code, 400)
+        get.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()
