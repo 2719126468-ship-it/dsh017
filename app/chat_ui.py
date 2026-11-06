@@ -1100,6 +1100,23 @@ html[data-theme="dark"] .canvas-pane{
         var lang = document.createElement('span');
         lang.textContent = fence[1] || 'CODE';
         codeHead.appendChild(lang);
+        var codeCopy = document.createElement('button');
+        codeCopy.type = 'button';
+        codeCopy.className = 'md-code-copy';
+        codeCopy.textContent = '复制';
+        codeCopy.onclick = function(){
+          var clip = document.createElement('textarea');
+          clip.value = codeLines.join(String.fromCharCode(10));
+          clip.style.position = 'fixed';
+          clip.style.opacity = '0';
+          document.body.appendChild(clip);
+          clip.select();
+          try { document.execCommand('copy'); codeCopy.textContent = '已复制'; }
+          catch(copyError) { codeCopy.textContent = '复制失败'; }
+          document.body.removeChild(clip);
+          window.setTimeout(function(){ codeCopy.textContent = '复制'; }, 1400);
+        };
+        codeHead.appendChild(codeCopy);
         codeWrap.appendChild(codeHead);
         var pre = document.createElement('pre');
         var code = document.createElement('code');
@@ -1348,7 +1365,6 @@ html[data-theme="dark"] .canvas-pane{
     }
 
     msgs.appendChild(row);
-    scrollBottom();
     return row;
   }
 
