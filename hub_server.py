@@ -14,6 +14,8 @@ def _lan_ip():
 """统一控制台 · 端口 8080 · 聚合 B站/番茄/塔罗 健康状态"""
 from flask import Flask, jsonify
 app = Flask(__name__)
+from app.auth import install_auth
+_auth_info = install_auth(app)
 
 SERVICES = [
     {"name": "Bilibili", "sub": "wbi console", "port": 8092,
@@ -37,6 +39,33 @@ SERVICES = [
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "service": "hub", "port": 8080})
+
+@app.route("/api/status")
+def api_status():
+    """Fetch backend health from loopback so the browser needs only hub auth."""
+    import json
+    from urllib.request import urlopen
+
+    statuses = {"8080": {"online": True}}
+    ports = sorted({int(item["port"]) for item in SERVICES if int(item["port"]) != 8080})
+    for port in ports:
+        entry = {"online": False}
+        try:
+            with urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as response:
+                health_data = json.loads(response.read().decode("utf-8"))
+                entry["online"] = 200 <= response.status < 300 and health_data.get("status") == "ok"
+        except Exception:
+            pass
+
+        if port == 8092 and entry["online"]:
+            try:
+                with urlopen("http://127.0.0.1:8092/metrics", timeout=2) as response:
+                    entry["metrics"] = json.loads(response.read().decode("utf-8"))
+            except Exception:
+                pass
+        statuses[str(port)] = entry
+
+    return jsonify({"services": statuses})
 
 HTML = r'''<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
@@ -112,39 +141,45 @@ h1{font-family:Georgia,"Noto Serif SC",serif;font-size:22px;font-weight:600;
     return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
   function checkAll(){
     okCount=0;failCount=0;
-    var promises=SERVICES.map(function(s){
-      var dot=document.querySelector('.dot[data-idx="'+s.port+'"]');
-      if(dot){dot.className="dot checking";}
-      return fetch(s.health.replace("{host}",HOST),{cache:"no-store",mode:"cors"})
-        .then(function(r){return r.ok?r.json():Promise.reject(r.status)})
-        .then(function(j){
-          if(dot){dot.className="dot "+(j.status==="ok"?"ok":"fail");}
-          if(j.status==="ok")okCount++;else failCount++;
-          // 如果服务有 metrics 字段，并行拉一次
-          if(s.metrics){
-            fetch(s.metrics.replace("{host}",HOST),{cache:"no-store",mode:"cors"})
-              .then(function(r){return r.json()})
-              .then(function(m){
-                var st=document.getElementById("stats-"+s.port);
-                if(!st)return;
-                var d=m.daily||{}, c=m.counters||{};
-                var parts=[];
-                if(d.history_total)parts.push("搜 "+d.history_total);
-                if(d.fav_total)parts.push("藏 "+d.fav_total);
-                if(c.search_ok)parts.push("ok "+c.search_ok);
-                if(c.search_352)parts.push("352×"+c.search_352);
-                st.textContent=parts.join(" · ")||"";
-              }).catch(function(){});
+    SERVICES.forEach(function(s){
+      document.querySelectorAll('.dot[data-idx="'+s.port+'"]').forEach(function(dot){
+        dot.className="dot checking";
+      });
+    });
+    fetch("/api/status",{cache:"no-store"})
+      .then(function(r){return r.ok?r.json():Promise.reject(r.status)})
+      .then(function(j){
+        var states=j.services||{};
+        SERVICES.forEach(function(s){
+          var data=states[String(s.port)]||{};
+          var online=data.online===true;
+          document.querySelectorAll('.dot[data-idx="'+s.port+'"]').forEach(function(dot){
+            dot.className="dot "+(online?"ok":"fail");
+          });
+          if(online)okCount++;else failCount++;
+          if(s.metrics&&data.metrics){
+            var m=data.metrics, d=m.daily||{}, c=m.counters||{};
+            var st=document.getElementById("stats-"+s.port);
+            if(st){
+              var parts=[];
+              if(d.history_total)parts.push("搜 "+d.history_total);
+              if(d.fav_total)parts.push("藏 "+d.fav_total);
+              if(c.search_ok)parts.push("ok "+c.search_ok);
+              if(c.search_352)parts.push("352×"+c.search_352);
+              st.textContent=parts.join(" · ")||"";
+            }
           }
-        })
-        .catch(function(){
-          if(dot){dot.className="dot fail";}
-          failCount++;
         });
-    });
-    Promise.allSettled(promises).then(function(){
-      foot.textContent=okCount+" online · "+failCount+" offline";
-    });
+        foot.textContent=okCount+" online · "+failCount+" offline";
+      })
+      .catch(function(){
+        SERVICES.forEach(function(s){
+          document.querySelectorAll('.dot[data-idx="'+s.port+'"]').forEach(function(dot){
+            dot.className="dot fail";
+          });
+        });
+        foot.textContent="0 online · "+SERVICES.length+" offline";
+      });
   }
   checkAll();
   setInterval(checkAll,30000);
