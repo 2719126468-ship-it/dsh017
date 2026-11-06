@@ -273,14 +273,23 @@ def api_audio():
         if not safe_title:
             safe_title = bvid
 
-        from flask import send_file
-        response = send_file(
-            str(tmp_mp3),
-            mimetype="audio/mpeg",
-            as_attachment=True,
-            download_name=safe_title + ".mp3",
-            conditional=True,
-        )
+        from urllib.parse import quote
+        disposition = f"attachment; filename*=UTF-8''{quote(safe_title + '.mp3')}"
+
+        def generate_mp3():
+            try:
+                with tmp_mp3.open("rb") as source:
+                    while True:
+                        chunk = source.read(64 * 1024)
+                        if not chunk:
+                            break
+                        yield chunk
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+        response = Response(generate_mp3(), mimetype="audio/mpeg")
+        response.headers["Content-Disposition"] = disposition
+        response.headers["Content-Length"] = str(tmp_mp3.stat().st_size)
         response.call_on_close(
             lambda directory=temp_dir: shutil.rmtree(directory, ignore_errors=True)
         )
