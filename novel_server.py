@@ -5,6 +5,7 @@
                                                   novel.snssdk.com 免签名端点，章节字体 PUA 密文用 charset.json 解密
 """
 import os, re, json, time, urllib.parse, threading
+import logging
 
 def _lan_ip():
     try:
@@ -26,6 +27,8 @@ try:
 except ImportError:
     import requests as http_requests
     USE_CFFI = False
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 from app.auth import install_auth
@@ -470,8 +473,9 @@ def api_search():
                 "abstract": b.get("abstract") or b.get("description") or "",
             })
         return jsonify({"code": 0, "books": out, "page": page})
-    except Exception as e:
-        return jsonify({"code": -500, "message": str(e)})
+    except Exception:
+        logger.exception("novel search request failed")
+        return jsonify({"code": -500, "message": "搜索暂时不可用，请稍后重试"})
 
 @app.route("/api/book")
 def api_book():
@@ -492,8 +496,9 @@ def api_book():
             "abstract": info.get("abstract") or "",
             "chapters": chapters,
         })
-    except Exception as e:
-        return jsonify({"code": -500, "message": str(e)})
+    except Exception:
+        logger.exception("novel book detail request failed")
+        return jsonify({"code": -500, "message": "书籍详情暂时不可用，请稍后重试"})
 
 @app.route("/api/content")
 def api_content():
@@ -505,8 +510,9 @@ def api_content():
     try:
         text = client.content(item_id)
         return jsonify({"code": 0, "item_id": item_id, "content": text})
-    except Exception as e:
-        return jsonify({"code": -500, "message": str(e)})
+    except Exception:
+        logger.exception("novel chapter content request failed")
+        return jsonify({"code": -500, "message": "章节内容暂时不可用，请稍后重试"})
 
 @app.route("/api/img")
 def api_img():
