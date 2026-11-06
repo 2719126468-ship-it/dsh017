@@ -66,6 +66,9 @@ class ProviderTransportTests(unittest.TestCase):
 
     def test_stream_reader_prefers_read1_to_avoid_buffering_sse_chunks(self):
         class ChunkResponse:
+            status = 200
+            headers = {}
+
             def __init__(self):
                 self.chunks = [b"data: one\\n\\n", b"data: two\\n\\n", b""]
                 self.read_calls = 0
