@@ -9,6 +9,7 @@ import base64
 from flask import Blueprint, request, jsonify, Response
 from app.llm_config import _PRESET_DIR, ZHIPU_API_KEY, ZHIPU_BASE, ZHIPU_MODEL
 from app.bili_client import client, UA
+from app.security import validate_remote_url
 
 chat_bp = Blueprint('chat', __name__)
 
@@ -62,6 +63,32 @@ def api_preset(name):
         return jsonify({"code": 0, "name": name, "content": content})
     except Exception as e:
         return jsonify({"code": -500, "message": str(e)})
+
+# ==================== 图片代理边界 ====================
+_MAX_SUMMARY_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def _read_summary_image(response, max_bytes=_MAX_SUMMARY_IMAGE_BYTES):
+    """Read only a bounded image response; reject non-images and oversized bodies."""
+    content_type = (response.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+    if not content_type.startswith("image/"):
+        return None
+    try:
+        length = response.headers.get("Content-Length")
+        if length is not None and int(length) > max_bytes:
+            return None
+    except (TypeError, ValueError):
+        return None
+
+    data = bytearray()
+    for chunk in response.iter_content(chunk_size=64 * 1024):
+        if not chunk:
+            continue
+        if len(data) + len(chunk) > max_bytes:
+            return None
+        data.extend(chunk)
+    return bytes(data) if data else None
+
 
 # ==================== 聊天预设结束 ====================
 
@@ -225,24 +252,42 @@ def api_summarize():
                "Content-Type": "application/json"}
 
     visual = ""
-    if vision and cover:
+    if vision and cover and validate_remote_url(
+        cover, allowed_suffixes=("hdslb.com", "bilibili.com")
+    ):
+        img_r = None
         try:
-            img_r = client.s.get(cover, headers={"Referer": "https://www.bilibili.com/"}, timeout=20)
-            img_b64 = base64.b64encode(img_r.content).decode()
-            img_data = "data:image/jpeg;base64," + img_b64
-            v_payload = {
-                "model": "glm-4.6v-flash",
-                "messages": [{"role": "user", "content": [
-                    {"type": "text", "text": "请详细描述这张图片中的场景、人物和关键视觉信息，100字以内。"},
-                    {"type": "image_url", "image_url": {"url": img_data}}
-                ]}],
-                "stream": False, "max_tokens": 300,
-            }
-            vr = client.s.post(ZHIPU_BASE, headers=headers, json=v_payload, timeout=60).json()
-            if vr.get("choices"):
-                visual = vr["choices"][0]["message"]["content"]
+            img_r = client.s.get(
+                cover,
+                headers={"Referer": "https://www.bilibili.com/"},
+                timeout=(5, 15),
+                stream=True,
+                allow_redirects=False,
+            )
+            if img_r.status_code == 200:
+                img_bytes = _read_summary_image(img_r)
+                if img_bytes:
+                    img_b64 = base64.b64encode(img_bytes).decode()
+                    img_data = "data:image/jpeg;base64," + img_b64
+                    v_payload = {
+                        "model": "glm-4.6v-flash",
+                        "messages": [{"role": "user", "content": [
+                            {"type": "text", "text": "请详细描述这张图片中的场景、人物和关键视觉信息，100字以内。"},
+                            {"type": "image_url", "image_url": {"url": img_data}}
+                        ]}],
+                        "stream": False, "max_tokens": 300,
+                    }
+                    vr = client.s.post(ZHIPU_BASE, headers=headers, json=v_payload, timeout=60).json()
+                    if vr.get("choices"):
+                        visual = vr["choices"][0]["message"]["content"]
         except Exception:
             visual = ""
+        finally:
+            if img_r is not None:
+                try:
+                    img_r.close()
+                except Exception:
+                    pass
 
     system = "你是一个视频内容总结助手。根据提供的视频信息，生成简洁、结构化的总结。包含：核心主题、主要内容、适合人群。用中文，200字以内。"
     user = "视频标题：%s\n视频简介：%s\n%s\n请总结这个视频。" % (
