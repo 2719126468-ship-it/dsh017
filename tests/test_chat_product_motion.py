@@ -6,6 +6,11 @@ from app.ui_theme import _THEME_CSS, _THEME_WIDGET
 
 class ChatProductMotionTests(unittest.TestCase):
     def test_chat_has_a_non_intrusive_jump_to_latest_control(self):
+        self.assertEqual(CHAT_HTML.count("async function requestStream"), 1)
+        self.assertEqual(CHAT_HTML.count("function renderAssistantMarkdown"), 1)
+        self.assertEqual(CHAT_HTML.count("var WS ="), 1)
+        self.assertEqual(CHAT_HTML.count("<script>"), 2)
+        self.assertEqual(CHAT_HTML.count("</script>"), 2)
         self.assertIn('id="jumpLatest"', CHAT_HTML)
         self.assertIn("function isNearBottom()", CHAT_HTML)
         self.assertIn("autoFollow = isNearBottom()", CHAT_HTML)
@@ -31,7 +36,11 @@ class ChatProductMotionTests(unittest.TestCase):
         self.assertIn("(codeCopy, codeLines.join(nl))", CHAT_HTML)
         self.assertIn("tableSeparatorPattern", CHAT_HTML)
         self.assertIn("className = 'md-table'", CHAT_HTML)
+        self.assertIn("isTableStart(index)", CHAT_HTML)
+        self.assertIn("headerCells.forEach", CHAT_HTML)
         self.assertIn(".md-table-wrap", _THEME_CSS)
+        self.assertIn("codeCopy.onclick", CHAT_HTML)
+        self.assertIn("codeLines.join(nl)", CHAT_HTML)
 
     def test_product_themes_have_distinct_chat_layouts_and_motion(self):
         self.assertIn('html[data-dsh-theme="claude"] .msg-row.assistant .msg-body', _THEME_CSS)
