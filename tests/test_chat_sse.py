@@ -11,7 +11,7 @@ class ChatStreamDecodingTests(unittest.TestCase):
         self.assertEqual("".join(_iter_utf8_text(chunks)), expected)
 
     def test_incomplete_final_utf8_sequence_is_flushed_as_replacement(self):
-        self.assertEqual("".join(_iter_utf8_text([b"safe text ", b"\\xe4"])), "safe text �")
+        self.assertEqual("".join(_iter_utf8_text([b"safe text ", bytes([0xE4])])), "safe text �")
 
 
 if __name__ == "__main__":
