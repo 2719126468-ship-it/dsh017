@@ -301,8 +301,7 @@ def fetch_provider_models(provider_id):
     headers = {"Accept": "application/json"}
     if key:
         headers["Authorization"] = "Bearer " + key
-    if not validate_provider_url(provider["base_url"]):
-        raise ValueError("供应商地址未通过出站安全校验")
+    # The outbound transport resolves, classifies and pins the actual TCP target.
     response = provider_request(
         "GET",
         _models_url(provider["base_url"]),
