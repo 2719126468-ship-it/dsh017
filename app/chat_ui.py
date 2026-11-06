@@ -8,7 +8,6 @@ import time
 import urllib.parse
 from flask import Blueprint, request, jsonify, Response
 from app.llm_config import ZHIPU_API_KEY, ZHIPU_BASE, ZHIPU_MODEL
-from app.bili_client import client
 from app.providers import resolve_provider
 from app.provider_transport import provider_request
 
