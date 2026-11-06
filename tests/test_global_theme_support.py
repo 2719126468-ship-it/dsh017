@@ -34,6 +34,10 @@ class GlobalThemeSupportTests(unittest.TestCase):
         self.assertIn('id="dsh017-theme-select"', body)
         self.assertIn('value="claude"', body)
         self.assertIn('value="chatgpt"', body)
+        self.assertIn('id="dsh017-mode-select"', body)
+        self.assertIn('value="system"', body)
+        self.assertIn('value="light"', body)
+        self.assertIn('value="dark"', body)
         self.assertIn("X-Content-Type-Options", response.headers)
         self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
         self.assertEqual(response.headers["X-Frame-Options"], "DENY")
@@ -59,6 +63,22 @@ class GlobalThemeSupportTests(unittest.TestCase):
         body = response.get_data(as_text=True)
 
         self.assertIn('<html data-dsh-theme="chatgpt"', body)
+
+    def test_saved_dark_mode_is_applied_before_first_paint(self):
+        self.client.set_cookie("dsh017_mode", "dark")
+        response = self.client.get("/")
+        body = response.get_data(as_text=True)
+
+        self.assertIn('data-dsh-mode="dark"', body)
+        self.assertIn('data-theme="dark"', body)
+
+    def test_saved_light_mode_is_applied_before_first_paint(self):
+        self.client.set_cookie("dsh017_mode", "light")
+        response = self.client.get("/")
+        body = response.get_data(as_text=True)
+
+        self.assertIn('data-dsh-mode="light"', body)
+        self.assertIn('data-theme="light"', body)
 
     def test_invalid_theme_cookie_is_not_reflected_into_html(self):
         self.client.set_cookie("dsh017_theme", '"><script>alert(1)</script>')
