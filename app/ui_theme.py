@@ -48,11 +48,11 @@ _THEME_CSS = r"""
   --glass-bg: rgba(247, 247, 248, .94);
   --glass: rgba(247, 247, 248, .94);
   --glass-border: rgba(13, 13, 13, .09);
-  --clay: #10A37F;
-  --accent: #10A37F;
-  --accent-hover: #0E8F70;
-  --accent-soft: rgba(16, 163, 127, .11);
-  --brand: #10A37F;
+  --clay: #202020;
+  --accent: #202020;
+  --accent-hover: #080808;
+  --accent-soft: rgba(0, 0, 0, .07);
+  --brand: #202020;
   --bg-soft: #F7F7F8;
   --bg-hover: #ECEDEF;
   --border: rgba(13, 13, 13, .08);
@@ -835,6 +835,22 @@ html[data-dsh-theme="claude"] .mask {
   .composer.is-streaming::after { display: none !important; }
 }
 
+
+#dsh017-theme-switcher.dsh017-theme-embedded {
+  position: relative !important;
+  right: auto !important;
+  bottom: auto !important;
+  top: auto !important;
+  margin-left: 2px;
+  flex: 0 0 auto;
+}
+#dsh017-theme-switcher.dsh017-theme-embedded #dsh017-theme-toggle {
+  width: 32px;
+  height: 32px;
+  box-shadow: none;
+  border-radius: 9px;
+  font-size: 16px;
+}
 </style>
 """
 
@@ -902,6 +918,12 @@ _THEME_WIDGET = r"""
   var toggle = document.getElementById("dsh017-theme-toggle");
   var panel = document.getElementById("dsh017-theme-panel");
   var select = document.getElementById("dsh017-theme-select");
+  var widget = document.getElementById("dsh017-theme-switcher");
+  var chatTopbar = document.querySelector(".topbar");
+  if (widget && chatTopbar) {
+    chatTopbar.appendChild(widget);
+    widget.classList.add("dsh017-theme-embedded");
+  }
   if (!toggle || !panel || !select) return;
 
   function setPanelOpen(open, returnFocus) {
