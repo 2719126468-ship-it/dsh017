@@ -666,6 +666,9 @@ html,body{background:var(--bg);color:var(--text);height:100%;
              opacity var(--dur-fast) var(--ease)}
 .composer button:active{transform:scale(.9)}
 .composer button:disabled{opacity:.35;transform:none;cursor:default}
+.composer #stop{background:#B54735;font-size:14px}
+.composer #stop[hidden]{display:none}
+.stream-stop-note{margin-top:8px;color:var(--muted);font-size:11px;letter-spacing:.02em}
 
 /* ============ 移动端：抽屉化 ============ */
 .mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);
@@ -908,6 +911,7 @@ html[data-theme="dark"] .canvas-pane{
     </div>
     <div class="composer" id="composer">
       <textarea id="input" rows="1" placeholder="给智谱清言发送消息…"></textarea>
+      <button id="stop" type="button" class="btn btn-stop" aria-label="停止生成" title="停止生成" hidden>■</button>
       <button id="send" class="btn btn-primary">↑</button>
     </div>
     <div class="composer-toolbar" id="composerToolbar">
@@ -949,6 +953,7 @@ html[data-theme="dark"] .canvas-pane{
   var msgs      = document.getElementById('msgs');
   var input     = document.getElementById('input');
   var sendBtn   = document.getElementById('send');
+  var stopBtn   = document.getElementById('stop');
   var sidebar   = document.getElementById('sidebar');
   var mask      = document.getElementById('mask');
   var presetSel = document.getElementById('presetSel');
@@ -959,6 +964,9 @@ html[data-theme="dark"] .canvas-pane{
   if(typeof window.wsContext === 'undefined') window.wsContext = null;
   var history = [];
   var busy = false;
+  var activeController = null;
+  var activeReader = null;
+  var stopRequested = false;
   var currentSystem = '';
   var autoFollow = true;
   var mobileRefocusAfterStream = false;
@@ -967,6 +975,24 @@ html[data-theme="dark"] .canvas-pane{
   }
   function updateJumpLatest() {
     if(jumpLatest) jumpLatest.classList.toggle('visible', !isNearBottom());
+  }
+  function stopGeneration() {
+    if(!busy || stopRequested) return;
+    stopRequested = true;
+    stopBtn.disabled = true;
+    stopBtn.textContent = '…';
+    if(chatAnnouncer) chatAnnouncer.textContent = '正在停止回复';
+    if(activeController) {
+      try { activeController.abort(); } catch(abortError) {}
+    }
+    if(activeReader && typeof activeReader.cancel === 'function') {
+      try {
+        var cancelResult = activeReader.cancel();
+        if(cancelResult && typeof cancelResult.catch === 'function') {
+          cancelResult.catch(function(){});
+        }
+      } catch(cancelError) {}
+    }
   }
   msgs.addEventListener('scroll', function() {
     autoFollow = isNearBottom();
@@ -1671,8 +1697,15 @@ html[data-theme="dark"] .canvas-pane{
   /* ================= 请求流式 ================= */
   async function requestStream(){
     mobileRefocusAfterStream = document.activeElement === input && window.innerWidth > 768;
+    stopRequested = false;
+    activeController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    activeReader = null;
     busy = true;
+    sendBtn.hidden = true;
     sendBtn.disabled = true;
+    stopBtn.hidden = false;
+    stopBtn.disabled = false;
+    stopBtn.textContent = '■';
     composer.classList.add('is-streaming');
     composer.setAttribute('aria-busy', 'true');
     if(chatAnnouncer) chatAnnouncer.textContent = '正在生成回复';
@@ -1692,17 +1725,20 @@ html[data-theme="dark"] .canvas-pane{
     var streamCompleted = false;
 
     try{
-      var resp = await fetch('/api/chat', {
+      var requestOptions = {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({messages: history, system: currentSystem,
                             model: currentModel, effort: currentEffort,
                             workspace: window.wsContext || null,
                             open_file_id: (typeof WS !== 'undefined' ? WS.currentId : null)})
-      });
+      };
+      if(activeController) requestOptions.signal = activeController.signal;
+      var resp = await fetch('/api/chat', requestOptions);
       if(!resp.ok) throw new Error('HTTP ' + resp.status);
 
       var reader = resp.body.getReader();
+      activeReader = reader;
       var decoder = new TextDecoder();
       var buffer = '';
 
@@ -1796,6 +1832,11 @@ html[data-theme="dark"] .canvas-pane{
         }
       }
 
+      if(stopRequested) {
+        var stoppedSignal = new Error('Generation stopped');
+        stoppedSignal.name = 'AbortError';
+        throw stoppedSignal;
+      }
       if(streamState.queued) flushStreamText(streamState);
       finalizeStreamMarkdown(streamState);
       streamCompleted = true;
@@ -1819,30 +1860,68 @@ html[data-theme="dark"] .canvas-pane{
         setTimeout(function(){ assistantRow.classList.remove('show-actions'); }, 2800);
       }
     }catch(e){
-      if(typing.parentNode) typing.remove();
+      var wasStopped = stopRequested || (activeController && activeController.signal.aborted) ||
+        (e && e.name === 'AbortError');
       if(streamState.queued) flushStreamText(streamState);
       finalizeStreamMarkdown(streamState);
-      if(assistantRow) {
-        var partial = assistantRow.querySelector('.msg-body');
-        if(partial) partial.textContent = fullText;
+      var thoughtPanel = typing.querySelector('.think-panel');
+      if(wasStopped) {
+        if(thoughtPanel) {
+          thoughtPanel.classList.add('collapsed');
+          var stoppedHead = thoughtPanel.querySelector('.think-head');
+          if(stoppedHead) stoppedHead.innerHTML = '<span class="arrow">▸</span>思考过程 · 已停止 · 点击展开';
+          if(typing.parentNode) msgs.insertBefore(thoughtPanel, typing);
+        }
+        if(typing.parentNode) typing.remove();
+        if(assistantRow && fullText.trim()) {
+          var stoppedBody = assistantRow.querySelector('.msg-body');
+          if(stoppedBody) renderAssistantMarkdown(stoppedBody, fullText);
+          history.push({role:'assistant', content: fullText, fresh:true});
+          var stoppedIdx = history.length - 1;
+          assistantRow.dataset.idx = stoppedIdx;
+          var stopNote = document.createElement('div');
+          stopNote.className = 'stream-stop-note';
+          stopNote.textContent = '已停止生成';
+          assistantRow.appendChild(stopNote);
+          attachAssistantActions(assistantRow, fullText, stoppedIdx);
+          assistantRow.classList.add('show-actions');
+        } else if(assistantRow && assistantRow.parentNode) {
+          assistantRow.parentNode.removeChild(assistantRow);
+        }
+        if(chatAnnouncer) chatAnnouncer.textContent = '回复已停止';
+        scrollBottom();
+      } else {
+        if(typing.parentNode) typing.remove();
+        if(assistantRow) {
+          var partial = assistantRow.querySelector('.msg-body');
+          if(partial) partial.textContent = fullText;
+        }
+        var errRow = document.createElement('div');
+        errRow.className = 'msg-row assistant';
+        var errBody = document.createElement('div');
+        errBody.className = 'msg-body';
+        errBody.style.color = '#e5484d';
+        errBody.textContent = '连接失败: ' + e.message;
+        errRow.appendChild(errBody);
+        msgs.appendChild(errRow);
+        if(chatAnnouncer) chatAnnouncer.textContent = '回复生成失败';
+        scrollBottom();
       }
-      var errRow = document.createElement('div');
-      errRow.className = 'msg-row assistant';
-      var errBody = document.createElement('div');
-      errBody.className = 'msg-body';
-      errBody.style.color = '#e5484d';
-      errBody.textContent = '连接失败: ' + e.message;
-      errRow.appendChild(errBody);
-      msgs.appendChild(errRow);
-      if(chatAnnouncer) chatAnnouncer.textContent = '回复生成失败';
-      scrollBottom();
     }finally{
+      var stoppedAtEnd = stopRequested;
+      activeController = null;
+      activeReader = null;
+      stopBtn.hidden = true;
+      stopBtn.disabled = false;
+      stopBtn.textContent = '■';
+      sendBtn.hidden = false;
       busy = false;
       sendBtn.disabled = false;
       composer.classList.remove('is-streaming');
       composer.removeAttribute('aria-busy');
       if(streamCompleted && chatAnnouncer) chatAnnouncer.textContent = '回复生成完成';
-      if(mobileRefocusAfterStream) input.focus();
+      if(mobileRefocusAfterStream && !stoppedAtEnd) input.focus();
+      stopRequested = false;
     }
   }
 
@@ -1936,6 +2015,7 @@ html[data-theme="dark"] .canvas-pane{
 
   /* ================= 绑定 ================= */
   sendBtn.onclick = send;
+  stopBtn.onclick = stopGeneration;
   input.onkeydown = function(e){
     if(e.key === 'Enter' && !e.shiftKey){
       e.preventDefault();
