@@ -17,6 +17,7 @@ _THEME_CSS = r"""
   --line: rgba(56, 50, 43, .12);
   --line-2: rgba(56, 50, 43, .18);
   --glass-bg: rgba(255, 254, 250, .88);
+  --glass: rgba(255, 254, 250, .88);
   --glass-border: rgba(56, 50, 43, .12);
   --clay: #C76645;
   --accent: #C76645;
@@ -45,6 +46,7 @@ _THEME_CSS = r"""
   --line: rgba(13, 13, 13, .08);
   --line-2: rgba(13, 13, 13, .13);
   --glass-bg: rgba(247, 247, 248, .94);
+  --glass: rgba(247, 247, 248, .94);
   --glass-border: rgba(13, 13, 13, .09);
   --clay: #10A37F;
   --accent: #10A37F;
@@ -194,6 +196,10 @@ html[data-dsh-theme="claude"][data-theme="dark"] .msg-row.user .msg-body,
 html[data-dsh-theme="chatgpt"][data-theme="dark"] .msg-row.user .msg-body {
   background: var(--bg-soft) !important;
   color: var(--text) !important;
+}
+html[data-dsh-theme="claude"] #themeBtn,
+html[data-dsh-theme="chatgpt"] #themeBtn {
+  display: none !important;
 }
 html[data-dsh-theme="claude"] :focus-visible,
 html[data-dsh-theme="chatgpt"] :focus-visible {
