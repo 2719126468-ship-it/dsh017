@@ -24,7 +24,7 @@ SQLite, chat history, presets, backups and the optional novel charset are stored
 
 ## AI key
 
-The APK does not contain an API key. Tap **API 设置** in the top bar and enter your own Zhipu API key. The key is encrypted with Android Keystore and is never exposed to page JavaScript. Bilibili, novel and tarot pages can open without an AI key, subject to the upstream sites' current behavior.
+The APK does not contain any provider key. Tap **API 设置** in the top bar to enter your own Zhipu API key. Additional OpenAI-compatible providers are configured from the **模型供应商** page. Provider keys are encrypted with Android Keystore and are never exposed to page JavaScript. The Magpie local app identifier is stored through the same encrypted bridge; Magpie itself must be installed and signed in separately, with its Gateway running on the device at `127.0.0.1:3425` for automatic discovery. Bilibili, novel and tarot pages can open without an AI key, subject to the upstream sites' current behavior.
 
 ## ARM-specific network behavior
 
