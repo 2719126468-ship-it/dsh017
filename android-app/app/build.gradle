@@ -80,7 +80,6 @@ tasks.register("stageDshPython", Copy) {
     from(rootProject.file("../hub_server.py"))
     from(rootProject.file("../novel_server.py"))
     from(rootProject.file("../tarot_server.py"))
-    from(rootProject.file("app/src/main/python/android_entry.py"))
     into("$buildDir/generated/dshPython")
 }
 // Chaquopy creates variant-specific merge*PythonSources tasks. They consume
