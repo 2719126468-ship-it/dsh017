@@ -363,6 +363,17 @@ html,body{background:var(--bg);color:var(--text);height:100%;
   transition:background var(--dur-fast) var(--ease),
              border-color var(--dur-fast) var(--ease)}
 .sb-item.new:active{transform:scale(.97)}
+.chat-history-list{display:flex;flex-direction:column;gap:3px;max-height:240px;overflow-y:auto;padding:2px 0}
+.chat-history-empty{padding:8px 12px;color:var(--muted);font-size:11px;line-height:1.5}
+.chat-history-row{display:flex;align-items:center;gap:4px;border-radius:8px;min-width:0}
+.chat-history-row.active{background:var(--bg-hover)}
+.chat-history-open{flex:1;min-width:0;padding:8px 10px;background:none;border:0;
+  color:var(--text-2);font:12px/1.4 inherit;text-align:left;cursor:pointer;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-history-row.active .chat-history-open{color:var(--text);font-weight:600}
+.chat-history-delete{width:28px;height:28px;flex-shrink:0;margin-right:4px;
+  border:0;border-radius:6px;background:none;color:var(--muted);cursor:pointer}
+.chat-history-delete:active{background:var(--bg-hover);color:#c4553d}
 .sb-item .icon{width:18px;text-align:center;font-size:14px;flex-shrink:0}
 .sb-item .label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-sep{height:1px;background:var(--border);margin:10px 6px}
@@ -849,6 +860,11 @@ html[data-theme="dark"] .canvas-pane{
         <span class="icon">＋</span><span class="label">新对话</span>
       </button>
       <div class="sb-sep"></div>
+      <div class="sb-label">最近对话</div>
+      <div class="chat-history-list" id="chatHistoryList">
+        <div class="chat-history-empty">正在载入对话…</div>
+      </div>
+      <div class="sb-sep"></div>
       <div class="sb-label">预设</div>
       <div class="sb-select-wrap">
         <select id="presetSel"><option value="">无预设</option></select>
@@ -967,9 +983,11 @@ html[data-theme="dark"] .canvas-pane{
   var composer  = document.getElementById('composer');
   var jumpLatest = document.getElementById('jumpLatest');
   var chatAnnouncer = document.getElementById('chatAnnouncer');
+  var chatHistoryList = document.getElementById('chatHistoryList');
 
   if(typeof window.wsContext === 'undefined') window.wsContext = null;
   var history = [];
+  var currentConversationId = null;
   var busy = false;
   var activeController = null;
   var activeReader = null;
