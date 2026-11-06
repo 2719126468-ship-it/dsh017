@@ -248,3 +248,5 @@ def install_auth(
 
         request.environ["dsh017.auth_level"] = level
         return None
+
+    return app.extensions["dsh017_auth"]
