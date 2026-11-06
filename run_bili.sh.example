@@ -1,32 +1,93 @@
 #!/bin/bash
+# Copy to run_bili.sh, configure ZHIPU_API_KEY, then run in the background.
+set -o pipefail
 
-# Copy this file to run_bili.sh and set the key in the environment or below.
-export ZHIPU_API_KEY="${ZHIPU_API_KEY:-YOUR_ZHIPU_KEY_HERE}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 export DSH017_DATA_DIR="${DSH017_DATA_DIR:-$SCRIPT_DIR/data}"
+export ZHIPU_API_KEY="${ZHIPU_API_KEY:-YOUR_ZHIPU_KEY_HERE}"
 
-# Bili Console 守护脚本 · 崩溃自动拉起 + 日志滚动（5MB × 2 份）
-LOG="${DSH017_LOG_FILE:-$DSH017_DATA_DIR/bili.log}"
-mkdir -p "$(dirname -- "$LOG")"
-MAX=5242880
+RUN_DIR="$DSH017_DATA_DIR/run"
+LOG_DIR="$DSH017_DATA_DIR/logs"
+LOG="${DSH017_LOG_FILE:-$LOG_DIR/bili.log}"
+LOCK_FILE="$RUN_DIR/bili-supervisor.lock"
+PID_FILE="$RUN_DIR/bili-supervisor.pid"
+MAX_LOG_BYTES=5242880
+ROTATE_INTERVAL=10
+RESTART_DELAY=3
 
-# 停旧进程
-pkill -f bili_console.py 2>/dev/null
-sleep 1
+mkdir -p "$RUN_DIR" "$LOG_DIR" "$(dirname -- "$LOG")"
 
-# 启动前清一次临时音频文件（防止磁盘占满）
-rm -f /tmp/tmp*.mp3 /tmp/tmp*.m4a 2>/dev/null
+if ! command -v flock >/dev/null 2>&1; then
+  echo "flock 未安装；请在 Ubuntu 容器中安装 util-linux。" >&2
+  exit 1
+fi
 
-while true; do
-  # 日志滚动：超过 5MB 就归档
-  if [ -f "$LOG" ] && [ "$(stat -c%s "$LOG" 2>/dev/null || echo 0)" -gt "$MAX" ]; then
-    mv -f "$LOG" "$LOG.1"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "Bilibili supervisor 已在运行。" >&2
+  exit 1
+fi
+printf '%s\n' "$$" > "$PID_FILE"
+
+STOP_REQUESTED=0
+CHILD_PID=""
+
+rotate_log() {
+  local size
+  [ -f "$LOG" ] || return 0
+  size="$(wc -c < "$LOG" 2>/dev/null || echo 0)"
+  [ "$size" -ge "$MAX_LOG_BYTES" ] || return 0
+
+  rm -f "$LOG.2"
+  [ ! -f "$LOG.1" ] || mv -f "$LOG.1" "$LOG.2"
+  cp -f "$LOG" "$LOG.1"
+  : > "$LOG"
+}
+
+request_stop() {
+  STOP_REQUESTED=1
+  if [ -n "$CHILD_PID" ]; then
+    kill -TERM "$CHILD_PID" 2>/dev/null || true
   fi
+}
 
-  echo "[$(date '+%F %T')] ===== starting bili_console.py =====" >> "$LOG"
-  "$PYTHON_BIN" -u "$SCRIPT_DIR/bili_console.py" >> "$LOG" 2>&1
-  EXIT=$?
-  echo "[$(date '+%F %T')] exited code=$EXIT, restart in 3s" >> "$LOG"
-  sleep 3
+cleanup() {
+  request_stop
+  if [ -n "$CHILD_PID" ]; then
+    while kill -0 "$CHILD_PID" 2>/dev/null; do
+      wait "$CHILD_PID" 2>/dev/null || true
+    done
+  fi
+  if [ -f "$PID_FILE" ] && [ "$(cat "$PID_FILE" 2>/dev/null)" = "$$" ]; then
+    rm -f "$PID_FILE"
+  fi
+}
+
+trap request_stop INT TERM
+trap cleanup EXIT
+
+while [ "$STOP_REQUESTED" -eq 0 ]; do
+  rotate_log
+  printf '[%s] ===== starting bili_console.py =====\n' "$(date '+%F %T')" >> "$LOG"
+  "$PYTHON_BIN" -u "$SCRIPT_DIR/bili_console.py" >> "$LOG" 2>&1 &
+  CHILD_PID=$!
+
+  while kill -0 "$CHILD_PID" 2>/dev/null; do
+    sleep "$ROTATE_INTERVAL"
+    rotate_log
+    if [ "$STOP_REQUESTED" -eq 1 ]; then
+      kill -TERM "$CHILD_PID" 2>/dev/null || true
+    fi
+  done
+
+  wait "$CHILD_PID"
+  EXIT_CODE=$?
+  CHILD_PID=""
+  printf '[%s] bili_console.py exited code=%s\n' "$(date '+%F %T')" "$EXIT_CODE" >> "$LOG"
+
+  [ "$STOP_REQUESTED" -eq 0 ] || break
+  sleep "$RESTART_DELAY"
 done
+
+echo "Bilibili supervisor stopped."
