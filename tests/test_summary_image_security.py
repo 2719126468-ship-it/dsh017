@@ -81,11 +81,16 @@ class SummaryImageGuardTests(unittest.TestCase):
         vision_result = _JsonResponse({
             "choices": [{"message": {"content": "cover description"}}]
         })
-        with patch.object(chat_routes.client.s, "get",
+        with patch("app.chat_routes.validate_remote_url", return_value=True) as validate, \
+             patch.object(chat_routes.client.s, "get",
                           side_effect=[metadata, image_response]) as get, \
              patch.object(chat_routes.client.s, "post",
                           side_effect=[vision_result, self.text_result]) as post:
             response = self.post_summary(vision=True)
+
+        validate.assert_called_once_with(
+            cover, allowed_suffixes=("hdslb.com", "bilibili.com")
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["visual_used"])
