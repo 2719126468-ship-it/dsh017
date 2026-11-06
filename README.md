@@ -39,15 +39,28 @@
 ```bash
 python3 -m pip install -r requirements.txt
 cp run_bili.sh.example run_bili.sh
-# 编辑 run_bili.sh，设置 ZHIPU_API_KEY；也可在启动前通过环境变量传入
-chmod +x run_bili.sh
-nohup ./run_bili.sh > /dev/null 2>&1 &
+cp run_sidecars.sh.example run_sidecars.sh
+cp stop_services.sh.example stop_services.sh
 
-nohup python3 -u tarot_server.py > tarot.log 2>&1 &
-nohup python3 -u novel_server.py > novel.log 2>&1 &
-nohup python3 -u hub_server.py   > hub.log   2>&1 &
+# 编辑 run_bili.sh 设置 ZHIPU_API_KEY，或先 export ZHIPU_API_KEY=...
+# 自定义数据目录时，在启动和停止命令前都保持同一个 DSH017_DATA_DIR
+export DSH017_DATA_DIR="${DSH017_DATA_DIR:-$PWD/data}"
+mkdir -p "$DSH017_DATA_DIR/logs"
+chmod +x run_bili.sh run_sidecars.sh stop_services.sh
+
+nohup ./run_bili.sh > "$DSH017_DATA_DIR/logs/bili-supervisor.out" 2>&1 &
+nohup ./run_sidecars.sh > "$DSH017_DATA_DIR/logs/sidecars-supervisor.out" 2>&1 &
+
+# 停止两个 supervisor 及其管理的服务
+./stop_services.sh
 ```
 
+
+### 服务看护与日志
+
+`run_bili.sh` 负责 8092 主服务，`run_sidecars.sh` 分别看护 8084、8091、8080；任一服务异常退出都会自动重启。日志统一写入 `$DSH017_DATA_DIR/logs/`，每个服务保留当前日志和两份轮转备份（单份约 5 MiB）。PID 与 `flock` 锁保存在 `$DSH017_DATA_DIR/run/`，避免重复启动，也不会通过 `pkill -f` 误杀其他目录的实例。使用 `./stop_services.sh` 停止本项目启动的 supervisor 和其子服务。
+
+停止脚本不会强制 `SIGKILL`；若服务未在等待时间内退出，会提示查看日志。启动和停止时必须使用相同的 `DSH017_DATA_DIR` 环境变量。
 
 ### 远程访问认证
 
@@ -76,6 +89,8 @@ nohup python3 -u hub_server.py   > hub.log   2>&1 &
 python3 -m compileall -q app *.py tests
 python3 -m unittest discover -s tests -v
 bash -n run_bili.sh.example
+bash -n run_sidecars.sh.example
+bash -n stop_services.sh.example
 ```
 
 GitHub Actions 会在 push、PR 和手动触发时运行 Python 3.10–3.12 测试。
@@ -85,7 +100,9 @@ GitHub Actions 会在 push、PR 和手动触发时运行 Python 3.10–3.12 测�
 ```
 .
 ├── bili_console.py        主入口（<100 行，只做 import + register + main）
-├── run_bili.sh.example    守护脚本模板（内联 env + 日志轮转 + 崩溃拉起）
+├── run_bili.sh.example    B站主服务看护脚本（PID锁 + 重启 + 日志轮转）
+├── run_sidecars.sh.example  塔罗/小说/控制台看护脚本（独立重启 + 日志轮转）
+├── stop_services.sh.example 安全停止脚本（仅停止本项目记录的 supervisor）
 ├── app/
 │   ├── auth.py            本机免认证 + 远程 Token / 权限分级
 │   ├── db.py              SQLite 层 + 备份 + 规则表
