@@ -71,7 +71,7 @@ _MAX_SUMMARY_IMAGE_BYTES = 5 * 1024 * 1024
 def _read_summary_image(response, max_bytes=_MAX_SUMMARY_IMAGE_BYTES):
     """Read only a bounded image response; reject non-images and oversized bodies."""
     content_type = (response.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
-    if not content_type.startswith("image/"):
+    if content_type not in {"image/jpeg", "image/png", "image/webp"}:
         return None
     try:
         length = response.headers.get("Content-Length")
@@ -268,7 +268,8 @@ def api_summarize():
                 img_bytes = _read_summary_image(img_r)
                 if img_bytes:
                     img_b64 = base64.b64encode(img_bytes).decode()
-                    img_data = "data:image/jpeg;base64," + img_b64
+                    image_mime = img_r.headers.get("Content-Type", "image/jpeg").split(";", 1)[0]
+                    img_data = "data:" + image_mime + ";base64," + img_b64
                     v_payload = {
                         "model": "glm-4.6v-flash",
                         "messages": [{"role": "user", "content": [
