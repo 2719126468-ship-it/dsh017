@@ -42,7 +42,7 @@ python3.11 --version
 gradle -p android-app assembleArm32Debug
 
 # 64-bit ARM
-python3.12 --version
+python3.13 --version
 gradle -p android-app assembleArm64Debug
 ```
 
