@@ -41,9 +41,13 @@ class ChatProviderRoutingTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("hello from provider", body)
-        self.assertEqual(post.call_args.args[0], "https://gateway.example.test/v1/chat/completions")
+        self.assertEqual(post.call_args.args[:2], (
+            "POST",
+            "https://gateway.example.test/v1/chat/completions",
+        ))
         self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer provider-secret")
-        self.assertEqual(post.call_args.kwargs["json"]["model"], "custom-model")
+        self.assertEqual(post.call_args.kwargs["json_body"]["model"], "custom-model")
+        self.assertEqual(post.call_args.kwargs["timeout"], (5, 180))
         upstream.close.assert_called_once()
 
     def test_unknown_provider_or_model_is_rejected_before_network(self):
