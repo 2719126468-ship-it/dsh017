@@ -40,6 +40,7 @@ class ChatProductMotionTests(unittest.TestCase):
         self.assertIn("new AbortController()", CHAT_HTML)
         self.assertIn("requestOptions.signal = activeController.signal", CHAT_HTML)
         self.assertIn("activeReader.cancel()", CHAT_HTML)
+        self.assertIn("var stoppedBeforeRead = new Error('Generation stopped')", CHAT_HTML)
         self.assertIn("stoppedSignal.name = 'AbortError'", CHAT_HTML)
         self.assertIn("if(wasStopped)", CHAT_HTML)
         self.assertIn("history.push({role:'assistant', content: fullText, fresh:true})", CHAT_HTML)
