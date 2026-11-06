@@ -884,13 +884,14 @@ html[data-theme="dark"] .canvas-pane{
       <span class="model">GLM-4.7</span>
     </div>
     <div class="messages-wrap">
-      <div class="messages" id="msgs" aria-live="polite" aria-relevant="additions text">
+      <div class="messages" id="msgs" aria-live="off">
         <div class="welcome" id="welcome">
           <h2>有什么可以帮你的？</h2>
           <p>输入消息开始对话 · 支持流式输出与预设切换</p>
         </div>
       </div>
       <button id="jumpLatest" type="button" aria-label="回到最新消息">↓ 最新消息</button>
+      <div id="chatAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
     <div class="composer" id="composer">
       <textarea id="input" rows="1" placeholder="给智谱清言发送消息…"></textarea>
@@ -940,6 +941,7 @@ html[data-theme="dark"] .canvas-pane{
   var presetSel = document.getElementById('presetSel');
   var composer  = document.getElementById('composer');
   var jumpLatest = document.getElementById('jumpLatest');
+  var chatAnnouncer = document.getElementById('chatAnnouncer');
 
   if(typeof window.wsContext === 'undefined') window.wsContext = null;
   var history = [];          // [{role, content}]
@@ -1375,6 +1377,7 @@ html[data-theme="dark"] .canvas-pane{
     sendBtn.disabled = true;
     composer.classList.add('is-streaming');
     composer.setAttribute('aria-busy', 'true');
+    if(chatAnnouncer) chatAnnouncer.textContent = '正在生成回复';
     autoFollow = isNearBottom();
 
     var typing = document.createElement('div');
@@ -1529,6 +1532,7 @@ html[data-theme="dark"] .canvas-pane{
       sendBtn.disabled = false;
       composer.classList.remove('is-streaming');
       composer.removeAttribute('aria-busy');
+      if(chatAnnouncer) chatAnnouncer.textContent = '回复生成完成';
       if(mobileRefocusAfterStream) input.focus();
     }
   }
