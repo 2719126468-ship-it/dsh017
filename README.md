@@ -15,7 +15,7 @@
 
 ## Android 独立 APK
 
-`android-app/` 提供内置 WebView + 嵌入式 Python/Flask 后端的 APK 构建。支持 Android 8.1（API 27）及以上，分别产出 ARMv7 32 位和 ARM64 64 位安装包；不需要 Termux/proot。首次启动会在应用私有目录初始化 SQLite 和服务，AI 功能需在应用右上角配置自己的智谱 API Key。细节、网络兼容差异与构建步骤见 [`android-app/README.md`](android-app/README.md)。GitHub Actions 会分别构建两个架构的 APK。
+`android-app/` 提供内置 WebView + 嵌入式 Python/Flask 后端的 APK 构建。支持 Android 8.1（API 27）及以上，分别产出 ARMv7 32 位和 ARM64 64 位安装包；不需要 Termux/proot。首次启动会在应用私有目录初始化 SQLite 和服务，AI 功能需在应用右上角配置自己的智谱 API Key。细节、网络兼容差异与构建步骤见 [`android-app/README.md`](android-app/README.md)。GitHub Actions 会分别构建两个架构的 APK；仅推送 `v*` 版本标签时才会创建对应 GitHub Release，普通主分支提交不会覆盖现有版本。
 
 ## 环境
 
@@ -162,7 +162,13 @@ GitHub Actions 会在 push、PR 和手动触发时运行 Python 3.10–3.12 测�
 
 远程供应商必须使用 HTTPS，且 DNS 返回的所有地址都必须是公网地址；HTTP 仅允许 `localhost` / loopback 本地网关。模型探测与聊天请求均禁用 HTTP 重定向，避免已验证地址跳转到其他主机。供应商密钥不会通过配置列表回显；Android APK 使用 Android Keystore 加密保存密钥。
 
-Magpie 目前以 Gateway 方式接入：先在 Magpie 自己的客户端完成登录，再将 Gateway 地址和 Key 配置到 DSH。DSH 尚未实现代替 Magpie/Qoder 的浏览器 OAuth 登录或读取其登录 Cookie；不要把网站 Cookie 当成 Gateway Key 粘贴。
+Magpie 默认端口可通过下方的「检测本机 Magpie」一键发现；若使用自定义端口或另一台设备上的 Gateway，仍可手动添加兼容供应商。浏览器订阅登录由 Magpie 自己负责，DSH 不读取 Magpie/Qoder 的浏览器 Cookie，也不代替 Qoder 执行私有 OAuth 流程；不要把网站 Cookie 当成 Gateway Key 粘贴。
+
+### Magpie Gateway 自动接入
+
+在同一台设备上启动 Magpie Gateway 后，进入「模型供应商」并点击「检测本机 Magpie」。DSH 只会访问固定的 loopback 地址 `127.0.0.1:3425`，核对 `/api/hello` 的 Magpie 标识，并从 `/v1/models` 读取可用模型；检测响应不会包含账号凭据。保存后可在聊天和工作区中选择 `magpie` 供应商。对于本机网关，DSH 使用 `magpie-dsh017` 作为调用方标识；它不是 Magpie 账号密码或订阅凭据。
+
+Magpie 负责订阅登录和令牌刷新，DSH 不会读取 Magpie 或 Qoder 的浏览器 Cookie。Android ARM64 终端版本可从 [Magpie Releases](https://github.com/yetone/magpie-releases/releases/latest) 获取。默认网关端口为 3425；若自行修改了 Magpie 端口，可继续通过自定义供应商手动配置。
 
 ## 已知限制
 

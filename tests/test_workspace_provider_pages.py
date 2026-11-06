@@ -34,6 +34,8 @@ class WorkspaceAndProviderPageTests(unittest.TestCase):
         self.assertIn("DeepSeek", body)
         self.assertIn("OpenRouter", body)
         self.assertIn("Magpie Gateway", body)
+        self.assertIn('id="detectMagpie"', body)
+        self.assertIn("/api/providers/detect-magpie", body)
         self.assertIn("DSHProviderKeys", body)
         self.assertIn("secret_configured", body)
 
