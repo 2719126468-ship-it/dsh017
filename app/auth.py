@@ -18,6 +18,7 @@ import secrets
 import socket
 from pathlib import Path
 from typing import Iterable
+from urllib.parse import urlsplit
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _USERNAME = "dsh017"
@@ -144,6 +145,30 @@ def _requires_admin(path: str, method: str, json_body: dict | None) -> bool:
     return False
 
 
+def _is_cross_site_write(request) -> bool:
+    """Reject browser write requests whose Fetch Metadata/Origin is cross-site."""
+    fetch_site = request.headers.get("Sec-Fetch-Site", "").strip().lower()
+    if fetch_site in {"cross-site", "same-site"}:
+        return True
+
+    origin = request.headers.get("Origin")
+    if not origin:
+        origin = request.headers.get("Referer")
+    if not origin:
+        # Non-browser API clients commonly omit Origin and Referer.
+        return False
+    try:
+        supplied = urlsplit(origin)
+        current = urlsplit(request.host_url)
+        return not (
+            supplied.scheme.lower() == current.scheme.lower()
+            and bool(supplied.netloc)
+            and supplied.netloc.casefold() == current.netloc.casefold()
+        )
+    except ValueError:
+        return True
+
+
 def install_auth(
     app,
     *,
@@ -209,6 +234,12 @@ def install_auth(
             response.headers["Cache-Control"] = "no-store"
             return response
 
+        if request.method in _WRITE_METHODS and _is_cross_site_write(request):
+            response = jsonify({"code": -403, "message": "拒绝跨站写入请求。"})
+            response.status_code = 403
+            response.headers["Cache-Control"] = "no-store"
+            return response
+
         if request.method in _WRITE_METHODS and level not in {"write", "admin"}:
             response = jsonify({"code": -403, "message": "此操作需要写入权限。"})
             response.status_code = 403
@@ -217,5 +248,3 @@ def install_auth(
 
         request.environ["dsh017.auth_level"] = level
         return None
-
-    return app.extensions["dsh017_auth"]

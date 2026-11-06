@@ -81,6 +81,28 @@ class RemoteAuthTests(unittest.TestCase):
         response = self.remote_post("/api/write", headers=self.basic(self.auth_token))
         self.assertEqual(response.status_code, 200)
 
+    def test_cross_origin_write_is_rejected_even_with_valid_token(self):
+        response = self.remote_post(
+            "/api/write",
+            headers={**self.bearer(self.auth_token), "Origin": "https://attacker.example"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_sec_fetch_site_cross_site_write_is_rejected(self):
+        response = self.remote_post(
+            "/api/write",
+            headers={**self.bearer(self.auth_token), "Sec-Fetch-Site": "cross-site"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_same_origin_write_is_allowed(self):
+        response = self.client.post(
+            "/api/write",
+            environ_base={"REMOTE_ADDR": "192.0.2.44"},
+            headers={**self.bearer(self.auth_token), "Origin": "http://localhost"},
+        )
+        self.assertEqual(response.status_code, 200)
+
     def test_admin_token_can_read_and_write(self):
         response = self.remote_post("/api/write", headers=self.bearer(self.admin_token))
         self.assertEqual(response.status_code, 200)
