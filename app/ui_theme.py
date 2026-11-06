@@ -275,7 +275,8 @@ html[data-dsh-theme="chatgpt"] :focus-visible {
   color: var(--text-2, #aaa);
   font-size: 12px;
 }
-#dsh017-theme-select {
+#dsh017-theme-select,
+#dsh017-mode-select {
   display: block;
   width: 100%;
   min-height: 38px;
