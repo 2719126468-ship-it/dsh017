@@ -26,7 +26,7 @@ def _serve(label, flask_app, port, threads):
         print("[DSH017 Android] %s stopped: %s" % (label, _errors[label]))
 
 
-def start_services(data_dir, preset_dir, api_key=""):
+def start_services(data_dir, preset_dir, api_key="", provider_keys_json="{}"):
     """Configure private storage, import the app, and launch all local services."""
     global _started, _apps
     with _start_lock:
@@ -50,7 +50,21 @@ def start_services(data_dir, preset_dir, api_key=""):
         else:
             os.environ.pop("ZHIPU_API_KEY", None)
 
+        # Import only after paths and credentials are configured.
+        try:
+            import json
+            provider_keys = json.loads(provider_keys_json or "{}")
+            if not isinstance(provider_keys, dict):
+                provider_keys = {}
+        except (TypeError, ValueError):
+            provider_keys = {}
+
         # Import only after paths and the API key are configured.
+        from app.providers import set_runtime_provider_secret
+        for provider_id, secret in provider_keys.items():
+            if isinstance(provider_id, str) and isinstance(secret, str):
+                set_runtime_provider_secret(provider_id, secret)
+
         from bili_console import app as bili_app
         from hub_server import app as hub_app
         from novel_server import app as novel_app
@@ -121,3 +135,12 @@ def wait_ready(timeout_seconds=45):
 
 def startup_errors():
     return dict(_errors)
+
+
+def set_provider_key(provider_id, api_key):
+    """Receive a credential already encrypted by the Android Keystore bridge."""
+    try:
+        from app.providers import set_runtime_provider_secret
+        return set_runtime_provider_secret(str(provider_id), str(api_key or ""))
+    except Exception:
+        return False
