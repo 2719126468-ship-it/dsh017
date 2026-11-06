@@ -30,6 +30,8 @@ except ImportError:
 app = Flask(__name__)
 from app.auth import install_auth
 _auth_info = install_auth(app)
+from app.ui_theme import install_theme_support
+install_theme_support(app)
 
 NOVEL_IMAGE_HOSTS = ("byteimg.com", "p6-tt.bytecdn.cn")
 NOVEL_MAX_QUERY_CHARS = 100
