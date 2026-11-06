@@ -368,7 +368,7 @@ html,body{background:var(--bg);color:var(--text);height:100%;
 .chat-history-row{display:flex;align-items:center;gap:4px;border-radius:8px;min-width:0}
 .chat-history-row.active{background:var(--bg-hover)}
 .chat-history-open{flex:1;min-width:0;padding:8px 10px;background:none;border:0;
-  color:var(--text-2);font:12px/1.4 inherit;text-align:left;cursor:pointer;
+  color:var(--text-2);font-family:inherit;font-size:12px;line-height:1.4;text-align:left;cursor:pointer;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-history-row.active .chat-history-open{color:var(--text);font-weight:600}
 .chat-history-delete{width:28px;height:28px;flex-shrink:0;margin-right:4px;
