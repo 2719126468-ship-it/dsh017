@@ -66,10 +66,19 @@ class MagpieGatewayTests(unittest.TestCase):
                 discover_local_magpie()
 
     def test_http_client_uses_fixed_loopback_without_proxy_or_redirects(self):
-        with patch("app.providers.http.client.HTTPConnection", FakeConnection) as factory:
+        with patch("app.providers.http.client.HTTPConnection") as factory:
+            connection = factory.return_value
+            connection.getresponse.return_value = FakeResponse(
+                b'{"name":"magpie","version":"test"}'
+            )
             payload = _magpie_get_json("/api/hello")
         self.assertEqual(payload["name"], "magpie")
         factory.assert_called_once_with("127.0.0.1", 3425, timeout=3)
+        connection.request.assert_called_once()
+        method, path, headers = connection.request.call_args.args
+        self.assertEqual((method, path), ("GET", "/api/hello"))
+        self.assertNotIn("Authorization", headers)
+        connection.close.assert_called_once()
 
     def test_detection_route_does_not_return_credentials(self):
         with patch("app.providers.discover_local_magpie", return_value={
