@@ -10,6 +10,7 @@ from flask import Blueprint, request, jsonify, Response
 from app.llm_config import ZHIPU_API_KEY, ZHIPU_BASE, ZHIPU_MODEL
 from app.bili_client import client
 from app.providers import resolve_provider
+from app.provider_transport import provider_request
 
 chat_ui_bp = Blueprint('chat_ui', __name__)
 
@@ -136,13 +137,12 @@ def api_chat():
         for attempt in range(max_attempts):
             r = None
             try:
-                r = client.s.post(
+                r = provider_request(
+                    "POST",
                     chat_url,
                     headers=headers,
-                    json=payload,
-                    stream=True,
-                    timeout=180,
-                    allow_redirects=False,
+                    json_body=payload,
+                    timeout=(5, 180),
                 )
                 # 状态码检查：429/1305 走重试，其他非 200 直接吐错误
                 if r.status_code != 200:
