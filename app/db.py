@@ -227,3 +227,138 @@ def _db_init_rules():
         c.commit(); c.close()
 
 _db_init_rules()
+
+
+# ==================== Chat conversations ====================
+def _db_init_chat_conversations():
+    with _DB_LOCK:
+        c = _db_conn()
+        c.executescript("""
+        CREATE TABLE IF NOT EXISTS chat_conversations (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT '新对话',
+            messages TEXT NOT NULL DEFAULT '[]',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_conversations_updated
+            ON chat_conversations(updated_at DESC);
+        """)
+        c.commit()
+        c.close()
+
+
+_db_init_chat_conversations()
+
+
+def db_chat_conversation_create(title, messages):
+    """Create a persisted conversation and return its public record."""
+    import uuid
+    now = int(time.time())
+    conversation_id = uuid.uuid4().hex
+    safe_title = str(title or "新对话").strip()[:80] or "新对话"
+    encoded = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
+    with _DB_LOCK:
+        c = _db_conn()
+        c.execute(
+            "INSERT INTO chat_conversations(id, title, messages, created_at, updated_at) "
+            "VALUES(?,?,?,?,?)",
+            (conversation_id, safe_title, encoded, now, now),
+        )
+        # Keep local storage bounded: retain the 200 most recently updated chats.
+        c.execute(
+            "DELETE FROM chat_conversations WHERE id NOT IN "
+            "(SELECT id FROM chat_conversations ORDER BY updated_at DESC LIMIT 200)"
+        )
+        c.commit()
+        c.close()
+    return {
+        "id": conversation_id,
+        "title": safe_title,
+        "messages": messages,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def db_chat_conversations_list(limit=50):
+    limit = max(1, min(200, int(limit)))
+    with _DB_LOCK:
+        c = _db_conn()
+        rows = c.execute(
+            "SELECT id, title, created_at, updated_at, messages "
+            "FROM chat_conversations ORDER BY updated_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        c.close()
+    items = []
+    for row in rows:
+        try:
+            messages = json.loads(row["messages"])
+        except (TypeError, ValueError):
+            messages = []
+        items.append({
+            "id": row["id"],
+            "title": row["title"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "message_count": len(messages) if isinstance(messages, list) else 0,
+        })
+    return items
+
+
+def db_chat_conversation_get(conversation_id):
+    with _DB_LOCK:
+        c = _db_conn()
+        row = c.execute(
+            "SELECT id, title, messages, created_at, updated_at "
+            "FROM chat_conversations WHERE id=?",
+            (conversation_id,),
+        ).fetchone()
+        c.close()
+    if row is None:
+        return None
+    try:
+        messages = json.loads(row["messages"])
+    except (TypeError, ValueError):
+        messages = []
+    if not isinstance(messages, list):
+        messages = []
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "messages": messages,
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def db_chat_conversation_update(conversation_id, title, messages):
+    now = int(time.time())
+    safe_title = str(title or "新对话").strip()[:80] or "新对话"
+    encoded = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
+    with _DB_LOCK:
+        c = _db_conn()
+        cursor = c.execute(
+            "UPDATE chat_conversations SET title=?, messages=?, updated_at=? WHERE id=?",
+            (safe_title, encoded, now, conversation_id),
+        )
+        c.commit()
+        updated = cursor.rowcount > 0
+        c.close()
+    if not updated:
+        return None
+    return db_chat_conversation_get(conversation_id)
+
+
+def db_chat_conversation_delete(conversation_id):
+    with _DB_LOCK:
+        c = _db_conn()
+        cursor = c.execute(
+            "DELETE FROM chat_conversations WHERE id=?",
+            (conversation_id,),
+        )
+        c.commit()
+        deleted = cursor.rowcount > 0
+        c.close()
+    return deleted

@@ -6,12 +6,97 @@ import json
 import time
 import urllib.parse
 import base64
+import re
 from flask import Blueprint, request, jsonify, Response
 from app.llm_config import _PRESET_DIR, ZHIPU_API_KEY, ZHIPU_BASE, ZHIPU_MODEL
 from app.bili_client import client, UA
 from app.security import validate_remote_url
+from app.db import (
+    db_chat_conversation_create,
+    db_chat_conversations_list,
+    db_chat_conversation_get,
+    db_chat_conversation_update,
+    db_chat_conversation_delete,
+)
 
 chat_bp = Blueprint('chat', __name__)
+
+_MAX_CONVERSATION_MESSAGES = 100
+_MAX_CONVERSATION_CHARS = 200_000
+_CONVERSATION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def _conversation_payload(body):
+    if not isinstance(body, dict):
+        return None, None, "请求必须是 JSON 对象"
+    messages = body.get("messages", [])
+    if not isinstance(messages, list):
+        return None, None, "messages 必须是数组"
+    if len(messages) > _MAX_CONVERSATION_MESSAGES:
+        return None, None, "单个会话最多保存100条消息"
+    cleaned = []
+    total_chars = 0
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") not in ("user", "assistant"):
+            return None, None, "消息格式无效"
+        content = message.get("content")
+        if not isinstance(content, str):
+            return None, None, "消息 content 必须是字符串"
+        total_chars += len(content)
+        if total_chars > _MAX_CONVERSATION_CHARS:
+            return None, None, "会话内容超过200000字符限制"
+        cleaned.append({"role": message["role"], "content": content})
+    title = body.get("title")
+    if title is not None and not isinstance(title, str):
+        return None, None, "title 必须是字符串"
+    if not title:
+        title = next((m["content"].strip() for m in cleaned if m["role"] == "user"), "新对话")
+    return str(title).strip()[:80] or "新对话", cleaned, None
+
+
+@chat_bp.route("/api/conversations", methods=["GET", "POST"])
+def api_conversations():
+    if request.method == "GET":
+        try:
+            limit = int(request.args.get("limit", 50))
+        except (TypeError, ValueError):
+            return jsonify({"code": -1, "message": "limit 必须是整数"}), 400
+        if not 1 <= limit <= 200:
+            return jsonify({"code": -1, "message": "limit 范围为1–200"}), 400
+        return jsonify({"code": 0, "items": db_chat_conversations_list(limit)})
+
+    body = request.get_json(force=True, silent=True)
+    title, messages, error = _conversation_payload(body)
+    if error:
+        return jsonify({"code": -1, "message": error}), 400
+    item = db_chat_conversation_create(title, messages)
+    return jsonify({"code": 0, "item": item}), 201
+
+
+@chat_bp.route("/api/conversations/<conversation_id>", methods=["GET", "PUT", "DELETE"])
+def api_conversation(conversation_id):
+    if not _CONVERSATION_ID_RE.fullmatch(conversation_id or ""):
+        return jsonify({"code": -1, "message": "会话 ID 无效"}), 400
+
+    if request.method == "GET":
+        item = db_chat_conversation_get(conversation_id)
+        if item is None:
+            return jsonify({"code": -1, "message": "会话不存在"}), 404
+        return jsonify({"code": 0, "item": item})
+
+    if request.method == "DELETE":
+        if not db_chat_conversation_delete(conversation_id):
+            return jsonify({"code": -1, "message": "会话不存在"}), 404
+        return jsonify({"code": 0})
+
+    body = request.get_json(force=True, silent=True)
+    title, messages, error = _conversation_payload(body)
+    if error:
+        return jsonify({"code": -1, "message": error}), 400
+    item = db_chat_conversation_update(conversation_id, title, messages)
+    if item is None:
+        return jsonify({"code": -1, "message": "会话不存在"}), 404
+    return jsonify({"code": 0, "item": item})
 
 @chat_bp.route("/api/presets")
 def api_presets():

@@ -363,6 +363,17 @@ html,body{background:var(--bg);color:var(--text);height:100%;
   transition:background var(--dur-fast) var(--ease),
              border-color var(--dur-fast) var(--ease)}
 .sb-item.new:active{transform:scale(.97)}
+.chat-history-list{display:flex;flex-direction:column;gap:3px;max-height:240px;overflow-y:auto;padding:2px 0}
+.chat-history-empty{padding:8px 12px;color:var(--muted);font-size:11px;line-height:1.5}
+.chat-history-row{display:flex;align-items:center;gap:4px;border-radius:8px;min-width:0}
+.chat-history-row.active{background:var(--bg-hover)}
+.chat-history-open{flex:1;min-width:0;padding:8px 10px;background:none;border:0;
+  color:var(--text-2);font-family:inherit;font-size:12px;line-height:1.4;text-align:left;cursor:pointer;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-history-row.active .chat-history-open{color:var(--text);font-weight:600}
+.chat-history-delete{width:28px;height:28px;flex-shrink:0;margin-right:4px;
+  border:0;border-radius:6px;background:none;color:var(--muted);cursor:pointer}
+.chat-history-delete:active{background:var(--bg-hover);color:#c4553d}
 .sb-item .icon{width:18px;text-align:center;font-size:14px;flex-shrink:0}
 .sb-item .label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-sep{height:1px;background:var(--border);margin:10px 6px}
@@ -849,6 +860,11 @@ html[data-theme="dark"] .canvas-pane{
         <span class="icon">＋</span><span class="label">新对话</span>
       </button>
       <div class="sb-sep"></div>
+      <div class="sb-label">最近对话</div>
+      <div class="chat-history-list" id="chatHistoryList">
+        <div class="chat-history-empty">正在载入对话…</div>
+      </div>
+      <div class="sb-sep"></div>
       <div class="sb-label">预设</div>
       <div class="sb-select-wrap">
         <select id="presetSel"><option value="">无预设</option></select>
@@ -967,9 +983,11 @@ html[data-theme="dark"] .canvas-pane{
   var composer  = document.getElementById('composer');
   var jumpLatest = document.getElementById('jumpLatest');
   var chatAnnouncer = document.getElementById('chatAnnouncer');
+  var chatHistoryList = document.getElementById('chatHistoryList');
 
   if(typeof window.wsContext === 'undefined') window.wsContext = null;
   var history = [];
+  var currentConversationId = null;
   var busy = false;
   var activeController = null;
   var activeReader = null;
@@ -1532,6 +1550,132 @@ html[data-theme="dark"] .canvas-pane{
     requestAnimationFrame(function(){ flushStreamText(state); });
   }
 
+  function conversationTitle() {
+    var firstUser = history.find(function(message){ return message.role === 'user'; });
+    var title = firstUser ? String(firstUser.content || '').trim() : '新对话';
+    return title.slice(0, 80) || '新对话';
+  }
+  function storeActiveConversationId(id) {
+    try {
+      if(id) localStorage.setItem('dsh017_active_conversation', id);
+      else localStorage.removeItem('dsh017_active_conversation');
+    } catch(storageError) {}
+  }
+  function renderConversationItems(items) {
+    if(!chatHistoryList) return;
+    chatHistoryList.textContent = '';
+    if(!items || !items.length) {
+      var empty = document.createElement('div');
+      empty.className = 'chat-history-empty';
+      empty.textContent = '还没有保存的对话';
+      chatHistoryList.appendChild(empty);
+      return;
+    }
+    items.forEach(function(item) {
+      var row = document.createElement('div');
+      row.className = 'chat-history-row' +
+        (item.id === currentConversationId ? ' active' : '');
+      var open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'chat-history-open';
+      open.textContent = item.title || '新对话';
+      open.title = (item.title || '新对话') + ' · ' + (item.message_count || 0) + ' 条消息';
+      open.onclick = function(){ openConversation(item.id); };
+      var remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'chat-history-delete';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', '删除会话：' + (item.title || '新对话'));
+      remove.onclick = function(event){
+        event.stopPropagation();
+        deleteConversation(item.id, item.title || '新对话');
+      };
+      row.appendChild(open);
+      row.appendChild(remove);
+      chatHistoryList.appendChild(row);
+    });
+  }
+  async function loadConversationList() {
+    if(!chatHistoryList) return [];
+    try {
+      var response = await fetch('/api/conversations?limit=50', {cache:'no-store'});
+      if(!response.ok) throw new Error('HTTP ' + response.status);
+      var result = await response.json();
+      if(result.code !== 0 || !Array.isArray(result.items)) throw new Error('会话列表格式无效');
+      renderConversationItems(result.items);
+      return result.items;
+    } catch(error) {
+      chatHistoryList.textContent = '';
+      var unavailable = document.createElement('div');
+      unavailable.className = 'chat-history-empty';
+      unavailable.textContent = '历史记录暂不可用';
+      chatHistoryList.appendChild(unavailable);
+      return [];
+    }
+  }
+  async function persistConversation() {
+    if(!history.length) return;
+    var payload = {title:conversationTitle(), messages:history};
+    var url = currentConversationId
+      ? '/api/conversations/' + encodeURIComponent(currentConversationId)
+      : '/api/conversations';
+    var method = currentConversationId ? 'PUT' : 'POST';
+    try {
+      var response = await fetch(url, {
+        method:method,
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      });
+      if(!response.ok) throw new Error('HTTP ' + response.status);
+      var result = await response.json();
+      if(result.code !== 0 || !result.item || !result.item.id) {
+        throw new Error(result.message || '保存会话失败');
+      }
+      currentConversationId = result.item.id;
+      storeActiveConversationId(currentConversationId);
+      await loadConversationList();
+    } catch(error) {
+      if(chatAnnouncer) chatAnnouncer.textContent = '会话保存失败，请检查连接';
+    }
+  }
+  async function openConversation(id) {
+    if(busy || !id) return;
+    try {
+      var response = await fetch('/api/conversations/' + encodeURIComponent(id), {cache:'no-store'});
+      if(response.status === 404) throw new Error('这条会话已不存在');
+      if(!response.ok) throw new Error('HTTP ' + response.status);
+      var result = await response.json();
+      if(result.code !== 0 || !result.item) throw new Error(result.message || '读取会话失败');
+      currentConversationId = result.item.id;
+      history = Array.isArray(result.item.messages) ? result.item.messages : [];
+      storeActiveConversationId(currentConversationId);
+      renderAll();
+      await loadConversationList();
+      if(isMobile()) closeSb();
+    } catch(error) {
+      if(chatAnnouncer) chatAnnouncer.textContent = error.message || '读取会话失败';
+    }
+  }
+  async function deleteConversation(id, title) {
+    if(busy || !id) return;
+    if(!window.confirm('删除会话“' + title + '”？此操作不可撤销。')) return;
+    try {
+      var response = await fetch('/api/conversations/' + encodeURIComponent(id), {method:'DELETE'});
+      if(!response.ok) throw new Error('HTTP ' + response.status);
+      var result = await response.json();
+      if(result.code !== 0) throw new Error(result.message || '删除失败');
+      if(currentConversationId === id) {
+        currentConversationId = null;
+        history = [];
+        storeActiveConversationId(null);
+        renderAll();
+      }
+      await loadConversationList();
+    } catch(error) {
+      if(chatAnnouncer) chatAnnouncer.textContent = error.message || '删除会话失败';
+    }
+  }
+
   /* ================= 预设 ================= */
   fetch('/api/presets').then(function(r){return r.json()}).then(function(j){
     if(j.code !== 0 || !j.items) return;
@@ -1871,6 +2015,7 @@ html[data-theme="dark"] .canvas-pane{
         var bodyEl2 = assistantRow.querySelector('.msg-body');
         renderAssistantMarkdown(bodyEl2, fullText);
         history.push({role:'assistant', content: fullText, fresh: true});
+        await persistConversation();
         var idx = history.length - 1;
         assistantRow.dataset.idx = idx;
         attachAssistantActions(assistantRow, fullText, idx);
@@ -1895,6 +2040,7 @@ html[data-theme="dark"] .canvas-pane{
           var stoppedBody = assistantRow.querySelector('.msg-body');
           if(stoppedBody) renderAssistantMarkdown(stoppedBody, fullText);
           history.push({role:'assistant', content: fullText, fresh:true});
+          await persistConversation();
           var stoppedIdx = history.length - 1;
           assistantRow.dataset.idx = stoppedIdx;
           var stopNote = document.createElement('div');
@@ -1999,6 +2145,7 @@ html[data-theme="dark"] .canvas-pane{
     renderAll();
     autoFollow = true;
     scrollBottom(true);
+    await persistConversation();
     await requestStream();
   }
 
@@ -2012,6 +2159,7 @@ html[data-theme="dark"] .canvas-pane{
     // 截断到该 user
     history = history.slice(0, userIdx + 1);
     renderAll();
+    await persistConversation();
     await requestStream();
   }
 
@@ -2020,13 +2168,17 @@ html[data-theme="dark"] .canvas-pane{
     history[userIdx] = {role:'user', content:newText};
     history = history.slice(0, userIdx + 1);
     renderAll();
+    await persistConversation();
     await requestStream();
   }
 
   function newChat(){
     if(busy) return;
     history = [];
+    currentConversationId = null;
+    storeActiveConversationId(null);
     renderAll();
+    loadConversationList();
     input.value = '';
     input.style.height = '44px';
     if(window.innerWidth > 768) input.focus();
@@ -2046,8 +2198,17 @@ html[data-theme="dark"] .canvas-pane{
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
   };
 
-  // 初始渲染
+  // 初始渲染并恢复上次打开的会话
   renderAll();
+  loadConversationList().then(function(items){
+    var savedId = null;
+    try { savedId = localStorage.getItem('dsh017_active_conversation'); } catch(storageError) {}
+    if(savedId && items.some(function(item){ return item.id === savedId; })) {
+      openConversation(savedId);
+    } else if(savedId) {
+      storeActiveConversationId(null);
+    }
+  });
 })();
 </script>
 
