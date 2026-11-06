@@ -34,6 +34,7 @@ class WorkspaceAndProviderPageTests(unittest.TestCase):
         self.assertIn("DeepSeek", body)
         self.assertIn("OpenRouter", body)
         self.assertIn("Magpie Gateway", body)
+        self.assertIn("@magpie-community/opencode-qoder-auth", body)
         self.assertIn('id="detectMagpie"', body)
         self.assertIn("/api/providers/detect-magpie", body)
         self.assertIn("DSHProviderKeys", body)
