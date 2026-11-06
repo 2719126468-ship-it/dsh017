@@ -41,6 +41,14 @@ class ChatProductMotionTests(unittest.TestCase):
         self.assertIn(".md-table-wrap", _THEME_CSS)
         self.assertIn("codeLines.join(nl)", CHAT_HTML)
 
+    def test_stream_reader_flushes_final_sse_data_and_propagates_server_errors(self):
+        self.assertEqual(CHAT_HTML.count("function handleStreamLine(rawLine)"), 1)
+        self.assertIn("buffer += decoder.decode()", CHAT_HTML)
+        self.assertIn("if(buffer) handleStreamLine(buffer)", CHAT_HTML)
+        self.assertIn("if(j.error)", CHAT_HTML)
+        self.assertIn("if(j.type === 'error')", CHAT_HTML)
+        self.assertNotIn("pe.message.indexOf('error')", CHAT_HTML)
+
     def test_product_themes_have_distinct_chat_layouts_and_motion(self):
         self.assertIn('html[data-dsh-theme="claude"] .msg-row.assistant .msg-body', _THEME_CSS)
         self.assertIn('html[data-dsh-theme="chatgpt"] .msg-row.assistant .msg-body', _THEME_CSS)
