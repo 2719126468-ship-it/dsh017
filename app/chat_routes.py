@@ -6,6 +6,7 @@ import json
 import time
 import urllib.parse
 import base64
+import re
 from flask import Blueprint, request, jsonify, Response
 from app.llm_config import _PRESET_DIR, ZHIPU_API_KEY, ZHIPU_BASE, ZHIPU_MODEL
 from app.bili_client import client, UA
