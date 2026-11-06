@@ -1270,12 +1270,6 @@ _THEME_WIDGET = r"""
       if(panel.classList.contains("open")&&!event.target.closest("#dsh017-theme-switcher")) setPanelOpen(false,false);
     });
   }
-  var legacyModeButton=document.getElementById("themeBtn");
-  if(legacyModeButton) {
-    legacyModeButton.addEventListener("click",function(){
-      applyMode(root.getAttribute("data-dsh-mode")==="dark"?"light":"dark",true);
-    });
-  }
   window.DSH017={
     applyTheme:applyTheme,
     applyMode:applyMode,
