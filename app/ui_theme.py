@@ -128,9 +128,13 @@ html[data-dsh-theme="chatgpt"] .sb-foot {
 html[data-dsh-theme="claude"] .card,
 html[data-dsh-theme="claude"] .svc,
 html[data-dsh-theme="claude"] .book,
+html[data-dsh-theme="claude"] .item,
+html[data-dsh-theme="claude"] .info,
 html[data-dsh-theme="chatgpt"] .card,
 html[data-dsh-theme="chatgpt"] .svc,
-html[data-dsh-theme="chatgpt"] .book {
+html[data-dsh-theme="chatgpt"] .book,
+html[data-dsh-theme="chatgpt"] .item,
+html[data-dsh-theme="chatgpt"] .info {
   background: var(--glass-bg) !important;
   color: var(--text) !important;
   border-color: var(--glass-border) !important;
@@ -150,6 +154,26 @@ html[data-dsh-theme="chatgpt"] .canvas-btn {
   background: var(--surface) !important;
   color: var(--text-2) !important;
   border-color: var(--line-2) !important;
+}
+html[data-dsh-theme="claude"] .sp,
+html[data-dsh-theme="claude"] .pg,
+html[data-dsh-theme="claude"] .dlbtn,
+html[data-dsh-theme="chatgpt"] .sp,
+html[data-dsh-theme="chatgpt"] .pg,
+html[data-dsh-theme="chatgpt"] .dlbtn {
+  background: var(--surface) !important;
+  color: var(--text-2) !important;
+  border-color: var(--line-2) !important;
+}
+html[data-dsh-theme="claude"] .overlay .title,
+html[data-dsh-theme="claude"] .overlay .author,
+html[data-dsh-theme="claude"] .action,
+html[data-dsh-theme="claude"] .back-btn,
+html[data-dsh-theme="chatgpt"] .overlay .title,
+html[data-dsh-theme="chatgpt"] .overlay .author,
+html[data-dsh-theme="chatgpt"] .action,
+html[data-dsh-theme="chatgpt"] .back-btn {
+  color: #FFFFFF !important;
 }
 html[data-dsh-theme="claude"] .card::before,
 html[data-dsh-theme="claude"] .svc::before,
