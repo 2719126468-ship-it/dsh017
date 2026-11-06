@@ -378,9 +378,11 @@ html,body{background:var(--bg);color:var(--text);height:100%;
   flex-direction:column;overflow:hidden;opacity:0;transform:translateX(10px);
   pointer-events:none;visibility:hidden;border-left:0 solid transparent;background:var(--bg);
   transition:flex-basis var(--dur-panel) var(--ease),width var(--dur-panel) var(--ease),opacity 220ms var(--ease),
-             transform var(--dur-panel) var(--ease),border-color var(--dur-panel) var(--ease),\n             visibility 0s linear var(--dur-panel)}
+             transform var(--dur-panel) var(--ease),border-color var(--dur-panel) var(--ease),
+             visibility 0s linear var(--dur-panel)}
 .canvas-pane.open{flex:0 0 clamp(300px,42%,620px);width:clamp(300px,42%,620px);
-  opacity:1;transform:translateX(0);pointer-events:auto;visibility:visible;\n  border-left:1px solid var(--border);transition-delay:0s}
+  opacity:1;transform:translateX(0);pointer-events:auto;visibility:visible;
+  border-left:1px solid var(--border);transition-delay:0s}
 
 /* 工作区头部 */
 .canvas-header{display:flex;align-items:center;gap:8px;padding:10px 14px;
@@ -489,7 +491,8 @@ html,body{background:var(--bg);color:var(--text);height:100%;
     transition:flex-basis var(--dur-panel) var(--ease),height var(--dur-panel) var(--ease),opacity 220ms var(--ease),
                transform var(--dur-panel) var(--ease),border-color var(--dur-panel) var(--ease)}
   .canvas-pane.open{flex:1 1 100%;width:100%;height:100%;min-height:0;
-    border-left:0;border-top:1px solid var(--border);transform:translateY(0);\n    visibility:visible;transition-delay:0s}
+    border-left:0;border-top:1px solid var(--border);transform:translateY(0);
+    visibility:visible;transition-delay:0s}
 }
 .topbar{display:flex;align-items:center;gap:8px;padding:10px 14px;
   border-bottom:1px solid var(--border);background:var(--topbar-bg);
