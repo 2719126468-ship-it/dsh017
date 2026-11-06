@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _USERNAME = "dsh017"
+_MAX_REQUEST_BYTES = 8 * 1024 * 1024
 _DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _ADMIN_EXACT_PATHS = {
     ("/api/workspace/rules", "POST"),
@@ -204,6 +205,11 @@ def install_auth(
     operations, including policy changes, backup creation and automatic editing.
     Requests originating from this host are exempt.
     """
+
+    # All services share one request-body ceiling to bound memory pressure.
+    # Respect an explicit application override when embedding this helper.
+    if app.config.get("MAX_CONTENT_LENGTH") is None:
+        app.config["MAX_CONTENT_LENGTH"] = _MAX_REQUEST_BYTES
     root = Path(data_dir) if data_dir is not None else Path(
         os.environ.get("DSH017_DATA_DIR", str(_DEFAULT_DATA_DIR))
     )
@@ -226,6 +232,20 @@ def install_auth(
     @app.before_request
     def _dsh017_auth_gate():
         from flask import jsonify, request
+
+        max_bytes = app.config.get("MAX_CONTENT_LENGTH")
+        if (
+            max_bytes is not None
+            and request.content_length is not None
+            and request.content_length > max_bytes
+        ):
+            response = jsonify({
+                "code": -413,
+                "message": "请求体超过服务端大小限制。",
+            })
+            response.status_code = 413
+            response.headers["Cache-Control"] = "no-store"
+            return response
 
         if _client_ip_is_local(request.remote_addr, trusted):
             request.environ["dsh017.auth_level"] = "local"
