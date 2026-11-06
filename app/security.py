@@ -57,12 +57,21 @@ def validate_provider_url(url):
             return False
 
         if scheme == "http":
-            if host == "localhost":
-                return True
             try:
                 return ipaddress.ip_address(host).is_loopback
             except ValueError:
-                return False
+                if host != "localhost":
+                    return False
+                infos = socket.getaddrinfo(
+                    host, port or 80, type=socket.SOCK_STREAM
+                )
+                addresses = {
+                    ipaddress.ip_address(item[4][0].split("%", 1)[0])
+                    for item in infos
+                }
+                return bool(addresses) and all(
+                    address.is_loopback for address in addresses
+                )
 
         if scheme != "https":
             return False
