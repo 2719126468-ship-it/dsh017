@@ -931,19 +931,19 @@ html[data-dsh-theme="claude"] .mask {
 /* DSH native identity: layered ink/navy surfaces and blue-violet accents. */
 html[data-dsh-theme="original"][data-dsh-mode="light"] {
   color-scheme: light;
-  --bg:#F4F6FC; --surface:#FFFFFF; --text:#171C2B; --text-2:#515B73;
-  --muted:#8790A6; --line:rgba(48,66,112,.11); --line-2:rgba(48,66,112,.18);
-  --accent:#536DFA; --accent-hover:#4056DE; --accent-soft:rgba(83,109,250,.12);
-  --brand:#536DFA; --bg-soft:#E9EDF8; --bg-hover:#DDE4F5; --mask-fade:#F4F6FC;
-  --topbar-bg:rgba(255,255,255,.86); --dsh-shadow:0 8px 30px rgba(49,68,125,.08);
+  --bg:#F6F3EE; --surface:#FFFEFA; --text:#201C18; --text-2:#625A52;
+  --muted:#948B81; --line:rgba(48,38,28,.10); --line-2:rgba(48,38,28,.17);
+  --accent:#D97757; --accent-hover:#C65C40; --accent-soft:rgba(217,119,87,.12);
+  --brand:#D97757; --bg-soft:#EEE9E1; --bg-hover:#E5DED4; --mask-fade:#F6F3EE;
+  --topbar-bg:rgba(255,254,250,.9); --dsh-shadow:0 5px 22px rgba(52,43,33,.07);
 }
 html[data-dsh-theme="original"][data-dsh-mode="dark"] {
   color-scheme: dark;
-  --bg:#0C1220; --surface:#141D31; --text:#ECF1FF; --text-2:#B2BED8;
-  --muted:#7583A3; --line:rgba(150,174,232,.12); --line-2:rgba(150,174,232,.20);
-  --accent:#8295FF; --accent-hover:#A0ADFF; --accent-soft:rgba(130,149,255,.15);
-  --brand:#8295FF; --bg-soft:#121B2E; --bg-hover:#1C2942; --mask-fade:#0C1220;
-  --topbar-bg:rgba(17,26,44,.9); --dsh-shadow:0 10px 32px rgba(0,0,0,.25);
+  --bg:#0A0A0A; --surface:#141413; --text:#FAF9F5; --text-2:#B0AEA5;
+  --muted:#77746D; --line:rgba(255,255,255,.075); --line-2:rgba(255,255,255,.13);
+  --accent:#D97757; --accent-hover:#E28B6D; --accent-soft:rgba(217,119,87,.13);
+  --brand:#D97757; --bg-soft:#141413; --bg-hover:#201E1C; --mask-fade:#0A0A0A;
+  --topbar-bg:rgba(10,10,10,.9); --dsh-shadow:0 10px 30px rgba(0,0,0,.28);
 }
 html[data-dsh-mode="dark"] { color-scheme:dark; }
 html[data-dsh-mode="light"] { color-scheme:light; }
@@ -1063,29 +1063,43 @@ html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .canvas-title,
 html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .sb-head h2,
 html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .topbar h1 { color:#ECECEC !important; }
 
-/* DSH chat: luminous blue-violet accent, translucent navigation, gradient actions. */
+/* DSH native: ink-black surfaces, warm utility gray, clay accent and precise mono chrome. */
 html[data-dsh-theme="original"] .shell,
 html[data-dsh-theme="original"] .main { background:var(--bg) !important; }
 html[data-dsh-theme="original"] .sidebar {
   background:var(--bg-soft) !important; border-right:1px solid var(--line) !important;
-  box-shadow:inset -1px 0 rgba(120,145,255,.04) !important;
+  box-shadow:inset -1px 0 rgba(217,119,87,.055) !important;
+}
+html[data-dsh-theme="original"] .sb-head h2,
+html[data-dsh-theme="original"] .topbar h1 {
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace !important;
+  font-size:14px !important; font-weight:650 !important; letter-spacing:.035em !important;
+}
+html[data-dsh-theme="original"] .sb-label,
+html[data-dsh-theme="original"] .sb-foot,
+html[data-dsh-theme="original"] .topbar .model {
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace !important;
+  letter-spacing:.09em !important;
 }
 html[data-dsh-theme="original"] .topbar {
   background:var(--topbar-bg) !important; border-bottom:1px solid var(--line) !important;
-  backdrop-filter:blur(18px) saturate(1.35); -webkit-backdrop-filter:blur(18px) saturate(1.35);
+  backdrop-filter:blur(14px) saturate(1.2); -webkit-backdrop-filter:blur(14px) saturate(1.2);
 }
 html[data-dsh-theme="original"] .composer {
   background:var(--surface) !important; border:1px solid var(--line-2) !important;
-  border-radius:22px !important; box-shadow:var(--dsh-shadow),0 0 0 1px rgba(83,109,250,.035) !important;
+  border-radius:16px !important; box-shadow:var(--dsh-shadow),0 0 0 1px rgba(217,119,87,.035) !important;
 }
 html[data-dsh-theme="original"] .composer button:not(.btn-stop) {
-  background:linear-gradient(135deg,#647CFF,#8A63E9) !important;
-  color:#fff !important; box-shadow:0 5px 16px rgba(99,111,247,.30);
+  background:linear-gradient(135deg,#D97757,#BD5D42) !important;
+  color:#fff !important; box-shadow:0 4px 13px rgba(190,89,62,.24);
 }
 html[data-dsh-theme="original"] .msg-row.user .msg-body {
-  background:linear-gradient(135deg,rgba(93,119,255,.15),rgba(145,105,235,.11)) !important;
-  color:var(--text) !important; border:1px solid rgba(119,133,255,.18) !important;
-  border-radius:17px !important;
+  background:rgba(217,119,87,.09) !important;
+  color:var(--text) !important; border:1px solid rgba(217,119,87,.18) !important;
+  border-radius:13px 13px 5px 13px !important;
+}
+html[data-dsh-theme="original"][data-dsh-mode="dark"] .msg-row.user .msg-body {
+  background:#1D1917 !important; border-color:rgba(217,119,87,.22) !important;
 }
 html[data-dsh-theme="original"] .canvas-pane,
 html[data-dsh-theme="original"] .canvas-header,
@@ -1099,17 +1113,17 @@ html[data-dsh-theme="original"] .sb-item:hover,
 html[data-dsh-theme="original"] .act:hover { background:var(--bg-hover) !important; }
 html[data-dsh-theme="original"] .canvas-btn.primary,
 html[data-dsh-theme="original"] #themeBtn {
-  background:linear-gradient(135deg,#647CFF,#8A63E9) !important; color:#fff !important;
-  border:0 !important; box-shadow:0 4px 12px rgba(99,111,247,.24);
+  background:linear-gradient(135deg,#D97757,#BD5D42) !important; color:#fff !important;
+  border:0 !important; box-shadow:0 4px 12px rgba(190,89,62,.20);
 }
 html[data-dsh-theme="original"] .messages-wrap {
   background:
-    radial-gradient(ellipse 70% 38% at 50% 0%,rgba(104,124,255,.055),transparent 72%),
+    radial-gradient(ellipse 70% 38% at 50% 0%,rgba(217,119,87,.045),transparent 72%),
     var(--bg) !important;
 }
 html[data-dsh-theme="original"] .msg-row.assistant .msg-body { color:var(--text) !important; }
 html[data-dsh-theme="original"] .model {
-  border:1px solid var(--line-2); border-radius:999px; padding:4px 8px;
+  border:1px solid var(--line-2); border-radius:5px; padding:4px 8px;
 }
 html[data-dsh-theme="original"] #themeBtn { display:inline-flex !important; }
 @media(prefers-reduced-motion:no-preference) {
