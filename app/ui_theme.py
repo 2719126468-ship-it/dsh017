@@ -379,7 +379,11 @@ def install_theme_support(app):
             "camera=(), microphone=(), geolocation=(), payment=()",
         )
 
-        if response.mimetype != "text/html":
+        if (
+            response.mimetype != "text/html"
+            or request.path.startswith("/api/")
+            or request.path in {"/health", "/metrics"}
+        ):
             return response
 
         html = response.get_data(as_text=True)
