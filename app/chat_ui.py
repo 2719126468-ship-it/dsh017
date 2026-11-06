@@ -2370,6 +2370,10 @@ html[data-theme="dark"] .canvas-pane{
   document.documentElement.setAttribute('data-theme', savedTheme || (prefersDark ? 'dark' : 'light'));
   if(themeBtn){
     themeBtn.onclick = function(){
+      if(window.DSH017 && typeof window.DSH017.toggleMode === 'function'){
+        window.DSH017.toggleMode();
+        return;
+      }
       var cur = document.documentElement.getAttribute('data-theme');
       var next = cur === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', next);

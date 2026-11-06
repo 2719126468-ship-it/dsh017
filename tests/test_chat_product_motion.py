@@ -76,6 +76,22 @@ class ChatProductMotionTests(unittest.TestCase):
         self.assertIn(".mask.show", _THEME_CSS)
         self.assertIn("@media (prefers-reduced-motion: reduce)", _THEME_CSS)
 
+    def test_all_visual_themes_keep_a_working_global_dark_mode(self):
+        self.assertIn('id="dsh017-mode-select"', _THEME_WIDGET)
+        self.assertIn('window.DSH017=', _THEME_WIDGET)
+        self.assertIn('toggleMode:function()', _THEME_WIDGET)
+        self.assertIn('data-dsh-mode="dark"', _THEME_CSS)
+        self.assertIn('html[data-dsh-theme="claude"][data-dsh-mode="dark"] .composer', _THEME_CSS)
+        self.assertIn('html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .composer', _THEME_CSS)
+        self.assertNotIn('html[data-dsh-theme="chatgpt"] #themeBtn', _THEME_CSS)
+        self.assertNotIn('html[data-dsh-theme="claude"] #themeBtn', _THEME_CSS)
+        self.assertIn('window.DSH017.toggleMode()', CHAT_HTML)
+
+    def test_dsh_native_theme_has_its_own_visual_identity(self):
+        self.assertIn('html[data-dsh-theme="original"] .composer', _THEME_CSS)
+        self.assertIn('linear-gradient(135deg,#D97757,#BD5D42)', _THEME_CSS)
+        self.assertIn('html[data-dsh-theme="original"][data-dsh-mode="dark"]', _THEME_CSS)
+
     def test_canvas_pane_uses_transitionable_closed_and_open_states(self):
         self.assertIn(".canvas-pane{display:flex;flex:0 0 0;width:0", CHAT_HTML)
         self.assertIn("transition:flex-basis var(--dur-panel)", CHAT_HTML)
@@ -90,7 +106,8 @@ class ChatProductMotionTests(unittest.TestCase):
     def test_theme_panel_is_accessible_and_uses_animated_open_state(self):
         self.assertIn('aria-hidden="true"', _THEME_WIDGET)
         self.assertIn('aria-expanded="false"', _THEME_WIDGET)
-        self.assertIn('panel.classList.toggle("open", open)', _THEME_WIDGET)
+        self.assertIn('panel.classList.toggle("open",open)', _THEME_WIDGET)
+        self.assertIn('function setPanelOpen(open,returnFocus)', _THEME_WIDGET)
         self.assertIn('panel.setAttribute("aria-hidden"', _THEME_WIDGET)
         self.assertIn('event.key === "Escape"', _THEME_WIDGET)
 
