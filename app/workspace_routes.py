@@ -227,6 +227,8 @@ def api_ws_auto_status():
 @workspace_bp.route("/api/workspace/apply_edit", methods=["POST"])
 def api_ws_apply_edit():
     body = request.get_json(force=True, silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"code": -1, "message": "请求参数必须是 JSON 对象"}), 400
     file_id = body.get("file_id")
     old_str = body.get("old_str", "")
     new_str = body.get("new_str", "")
