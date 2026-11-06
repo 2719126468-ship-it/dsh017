@@ -1,5 +1,6 @@
 import base64
 import os
+from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import unittest
 from pathlib import Path
@@ -172,6 +173,21 @@ class RemoteAuthTests(unittest.TestCase):
             self.assertNotEqual(paths[0].read_text(), paths[1].read_text())
             self.assertEqual(paths[0].stat().st_mode & 0o777, 0o600)
             self.assertEqual(paths[1].stat().st_mode & 0o777, 0o600)
+
+
+    def test_parallel_service_startup_uses_one_complete_token_pair(self):
+        with tempfile.TemporaryDirectory(prefix="dsh017-auth-parallel-") as directory:
+            def initialize(_):
+                app = Flask("parallel-auth")
+                info = install_auth(app, data_dir=directory, local_ips={"192.0.2.1"})
+                return tuple(Path(path).read_text(encoding="utf-8").strip()
+                             for path in info["token_files"])
+
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                pairs = list(pool.map(initialize, range(16)))
+            self.assertEqual(len(set(pairs)), 1)
+            self.assertTrue(all(len(value) >= 32 for value in pairs[0]))
+            self.assertNotEqual(pairs[0][0], pairs[0][1])
 
 
 class LocalAddressTests(unittest.TestCase):
