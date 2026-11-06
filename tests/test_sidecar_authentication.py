@@ -103,5 +103,73 @@ class SidecarAuthenticationTests(unittest.TestCase):
         self.assertIn("metrics", statuses["8092"])
 
 
+    def test_novel_image_proxy_rejects_untrusted_urls_before_network(self):
+        with patch("novel_server.validate_remote_url", return_value=False) as validate, \
+             patch.object(self.novel.client.s, "get") as get:
+            response = self.remote(
+                self.novel.app.test_client(),
+                "/api/img?u=http://127.0.0.1/admin",
+                self.normal_token,
+            )
+        self.assertEqual(response.status_code, 400)
+        validate.assert_called_once_with(
+            "http://127.0.0.1/admin",
+            allowed_suffixes=self.novel.NOVEL_IMAGE_HOSTS,
+        )
+        get.assert_not_called()
+
+    def test_novel_image_proxy_fetches_allowlisted_cdn_without_redirects(self):
+        class FakeImageResponse:
+            status_code = 200
+            headers = {"Content-Type": "image/png"}
+            closed = False
+
+            def iter_content(self, chunk_size):
+                return [b"image-bytes"]
+
+            def close(self):
+                self.closed = True
+
+        fake = FakeImageResponse()
+        url = "https://p3-novel.byteimg.com/large/test.png"
+        with patch("novel_server.validate_remote_url", return_value=True) as validate, \
+             patch.object(self.novel.client.s, "get", return_value=fake) as get:
+            response = self.remote(
+                self.novel.app.test_client(),
+                "/api/img?u=" + url,
+                self.normal_token,
+            )
+            body = response.data
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body, b"image-bytes")
+        validate.assert_called_once_with(url, allowed_suffixes=self.novel.NOVEL_IMAGE_HOSTS)
+        self.assertFalse(get.call_args.kwargs["allow_redirects"])
+        self.assertTrue(fake.closed)
+
+    def test_novel_image_proxy_does_not_follow_cdn_redirects(self):
+        class FakeRedirectResponse:
+            status_code = 302
+            headers = {"Location": "http://127.0.0.1/admin"}
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        fake = FakeRedirectResponse()
+        with patch("novel_server.validate_remote_url", return_value=True), \
+             patch.object(self.novel.client.s, "get", return_value=fake) as get:
+            response = self.remote(
+                self.novel.app.test_client(),
+                "/api/img?u=https://p3-novel.byteimg.com/large/test.png",
+                self.normal_token,
+            )
+
+        self.assertEqual(response.status_code, 502)
+        get.assert_called_once()
+        self.assertFalse(get.call_args.kwargs["allow_redirects"])
+        self.assertTrue(fake.closed)
+
+
 if __name__ == "__main__":
     unittest.main()
