@@ -5,15 +5,11 @@ from app.security import validate_provider_url
 
 
 class ProviderUrlSecurityTests(unittest.TestCase):
-    def test_https_provider_with_only_public_dns_answers_is_allowed(self):
+    def test_https_provider_with_public_dns_answer_is_allowed(self):
         with patch("app.security.socket.getaddrinfo", return_value=[
-            (2, 1, 6, "", ("203.0.113.8", 443)),
+            (2, 1, 6, "", ("8.8.8.8", 443)),
         ]):
-            # Documentation ranges are intentionally non-global, so use a public resolver IP.
-            with patch("app.security.socket.getaddrinfo", return_value=[
-                (2, 1, 6, "", ("8.8.8.8", 443)),
-            ]):
-                self.assertTrue(validate_provider_url("https://api.example.test/v1"))
+            self.assertTrue(validate_provider_url("https://api.example.test/v1"))
 
     def test_private_or_mixed_dns_answers_are_rejected(self):
         answers = [
@@ -22,6 +18,10 @@ class ProviderUrlSecurityTests(unittest.TestCase):
         ]
         with patch("app.security.socket.getaddrinfo", return_value=answers):
             self.assertFalse(validate_provider_url("https://api.example.test/v1"))
+
+    def test_dns_resolution_failure_is_rejected(self):
+        with patch("app.security.socket.getaddrinfo", side_effect=OSError("no DNS")):
+            self.assertFalse(validate_provider_url("https://missing.example.test/v1"))
 
     def test_remote_http_is_rejected(self):
         with patch("app.security.socket.getaddrinfo", return_value=[
