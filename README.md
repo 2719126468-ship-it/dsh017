@@ -62,6 +62,18 @@ nohup ./run_sidecars.sh > "$DSH017_DATA_DIR/logs/sidecars-supervisor.out" 2>&1 &
 
 停止脚本不会强制 `SIGKILL`；若服务未在等待时间内退出，会提示查看日志。启动和停止时必须使用相同的 `DSH017_DATA_DIR` 环境变量。
 
+### 全站外观主题
+
+任意页面右下角的 `◐` 按钮都可切换全站外观：
+
+- **DSH 原生**：保留当前暗色工业风与各页面原有配色。
+- **Claude 风格**：暖白背景、柔和边界与陶土橙强调色。
+- **ChatGPT 风格**：简洁白/浅灰界面与绿色强调色。
+
+这是界面外观主题，不会更换底层模型、API 服务或品牌身份。选择保存在 `dsh017_theme` 外观 Cookie 中；同一主机名/IP 下的四个端口共用设置，无需分别选择。主题层在服务端 HTML 响应中轻量注入，不依赖外部 CDN、字体或新增 Python 包。聊天页面原有的深浅色按钮只在 DSH 原生主题下显示。
+
+四个 Web 服务统一添加 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 与收紧的 `Permissions-Policy` 浏览器响应头；目前未引入会破坏现有内联页面脚本的严格 CSP。
+
 ### 小说搜索代理与隐私
 
 `8091` 的小说搜索默认只请求番茄官方 HTTPS 搜索端点。旧版本内置的两个社区代理使用明文 HTTP（`101.35.133.34:5000`、`112.126.27.62:6889`），代理运营方及传输链路可能看到搜索关键词，因此默认不再调用。
@@ -117,6 +129,7 @@ GitHub Actions 会在 push、PR 和手动触发时运行 Python 3.10–3.12 测�
 ├── stop_services.sh.example 安全停止脚本（仅停止本项目记录的 supervisor）
 ├── app/
 │   ├── auth.py            本机免认证 + 远程 Token / 权限分级
+│   ├── ui_theme.py        全站主题切换 + 基础浏览器安全响应头
 │   ├── db.py              SQLite 层 + 备份 + 规则表
 │   ├── bili_client.py     BiliClient + WBI 签名 + curl_cffi 共享实例
 │   ├── metrics.py         指标计数器 + playurl 缓存
