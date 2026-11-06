@@ -7,12 +7,22 @@ import time
 import subprocess
 import tempfile
 import urllib.parse
+import logging
 from flask import Blueprint, request, jsonify, Response
 from app.bili_client import client, UA
 from app.metrics import _metric_inc, _playurl_cache_get, _playurl_cache_set
 from app.db import db_history_add
+from app.security import validate_remote_url
+
+logger = logging.getLogger(__name__)
 
 bili_bp = Blueprint('bili', __name__)
+
+def _safe_unlink(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 @bili_bp.route("/api/suggest")
 def api_suggest():
@@ -78,11 +88,11 @@ def api_search():
         if data.get("code") == -352:
             _metric_inc("search_352")
         if data.get("code") != 0:
-            app.logger.warning("[SEARCH_FAIL] q=%s page=%d code=%s msg=%s",
+            logger.warning("[SEARCH_FAIL] q=%s page=%d code=%s msg=%s",
                                q, page, data.get("code"), data.get("message"))
         return jsonify(data)
     except Exception as e:
-        app.logger.error("[SEARCH_EXC] q=%s page=%d err=%s", q, page, e)
+        logger.exception("[SEARCH_EXC] q=%s page=%d", q, page)
         return jsonify({"code":-500,"message":str(e)})
 
 @bili_bp.route("/api/pages")
@@ -212,31 +222,32 @@ def api_audio():
         filename = safe_title + ".mp3"
         disp = f"attachment; filename*=UTF-8''{quote(filename)}"
 
-        # 关键：先把 MP3 整个读进内存，再返回，避免 finally 提前删文件
-        with open(tmp_mp3.name, "rb") as f:
-            mp3_data = f.read()
-        resp = Response(mp3_data, status=200, content_type="audio/mpeg")
-        resp.headers["Content-Disposition"] = disp
-        resp.headers["Content-Length"] = str(len(mp3_data))
-        return resp
+        from flask import send_file
+        response = send_file(tmp_mp3.name, mimetype="audio/mpeg",
+                             as_attachment=True, download_name=filename,
+                             conditional=True)
+        response.call_on_close(lambda: _safe_unlink(tmp_mp3.name))
+        return response
 
     finally:
-        for pth in (tmp_m4a.name, tmp_mp3.name):
-            try: os.unlink(pth)
-            except: pass
+        _safe_unlink(tmp_m4a.name)
 
 @bili_bp.route("/api/img")
 def api_img():
     """代理 B 站封面图，带 Referer，避免 403"""
     u = request.args.get("u", "")
-    if not u.startswith("http"):
+    if not validate_remote_url(u, allowed_suffixes=("hdslb.com", "bilibili.com")):
         return "", 400
     try:
         r = client.s.get(u, headers={"User-Agent": UA, "Referer": "https://www.bilibili.com/"},
-                         timeout=15, stream=True)
+                         timeout=(5, 15), stream=True, allow_redirects=False)
         def gen():
-            for chunk in r.iter_content(chunk_size=32*1024):
-                if chunk: yield chunk
+            try:
+                for chunk in r.iter_content(chunk_size=32*1024):
+                    if chunk:
+                        yield chunk
+            finally:
+                r.close()
         resp = Response(gen(), status=r.status_code,
                         content_type=r.headers.get("Content-Type", "image/jpeg"))
         resp.headers["Cache-Control"] = "public, max-age=86400"
@@ -287,17 +298,27 @@ def api_video():
 
 @bili_bp.route("/api/proxy")
 def api_proxy():
-    u = request.args.get("u","")
-    if not u.startswith("http"): return "bad url", 400
-    headers = {"User-Agent":UA, "Referer":"https://www.bilibili.com/"}
+    u = request.args.get("u", "")
+    if not validate_remote_url(u, allowed_suffixes=("bilivideo.com", "bilivideo.cn", "hdslb.com", "bilibili.com")):
+        return "bad url", 400
+    headers = {"User-Agent": UA, "Referer": "https://www.bilibili.com/"}
     rng = request.headers.get("Range")
-    if rng: headers["Range"] = rng
-    r = client.s.get(u, headers=headers, stream=True, timeout=30)
+    if rng:
+        headers["Range"] = rng
+    try:
+        r = client.s.get(u, headers=headers, stream=True, timeout=(5, 30), allow_redirects=False)
+    except Exception:
+        logger.exception("video proxy request failed")
+        return "upstream unavailable", 502
     def gen():
-        for chunk in r.iter_content(chunk_size=64*1024):
-            if chunk: yield chunk
+        try:
+            for chunk in r.iter_content(chunk_size=64*1024):
+                if chunk:
+                    yield chunk
+        finally:
+            r.close()
     resp = Response(gen(), status=r.status_code,
-                    content_type=r.headers.get("Content-Type","video/mp4"))
+                    content_type=r.headers.get("Content-Type", "video/mp4"))
     for h in ("Content-Range","Accept-Ranges","Content-Length"):
         if h in r.headers: resp.headers[h] = r.headers[h]
     resp.headers["Accept-Ranges"] = "bytes"

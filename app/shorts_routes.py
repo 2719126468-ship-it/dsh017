@@ -15,10 +15,14 @@ def api_shorts():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify({"code": -1, "message": "请输入关键词"})
+    if len(q) > 100:
+        return jsonify({"code": -1, "message": "关键词过长"}), 400
     try:
         page = int(request.args.get("page", 1))
-    except Exception:
+    except (TypeError, ValueError):
         page = 1
+    if page < 1 or page > 100:
+        return jsonify({"code": -1, "message": "页码超出范围"}), 400
     try:
         data = client.search(q, page, order="click")
         if data.get("code") != 0:
@@ -125,7 +129,8 @@ html,body{background:var(--bg);color:var(--text);
 (function(){
   var container = document.getElementById('container');
   var qInput = document.getElementById('q');
-  var ST = { q:'', page:1, loading:false, items:[], observer:null };
+  var ST = { q:'', page:1, loading:false, hasMore:true, items:[], observer:null,
+             requestId:0, controller:null };
 
   function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
@@ -134,23 +139,40 @@ html,body{background:var(--bg);color:var(--text);
   function writeQ(q){try{if(history.replaceState)history.replaceState(null,'','?q='+encodeURIComponent(q))}catch(e){}}
 
   function fetchShorts(q, page){
-    if(ST.loading) return;
+    if(ST.loading || !ST.hasMore) return Promise.resolve([]);
     ST.loading = true;
-    return fetch('/api/shorts?q='+encodeURIComponent(q)+'&page='+page)
-      .then(function(r){return r.json()})
+    var requestId = ++ST.requestId;
+    var controller = new AbortController();
+    ST.controller = controller;
+    return fetch('/api/shorts?q='+encodeURIComponent(q)+'&page='+page,
+                 {signal:controller.signal})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(function(j){
-        ST.loading = false;
+        if(requestId !== ST.requestId) return [];
         if(j.code !== 0) throw new Error(j.message || 'code '+j.code);
-        var items = j.items || [];
+        var items = Array.isArray(j.items) ? j.items : [];
+        ST.loading = false;
+        ST.controller = null;
+        if(!items.length){ ST.hasMore = false; removeLoadingSlot(); return []; }
         ST.items = ST.items.concat(items);
+        if(items.length < 20) ST.hasMore = false;
         renderNew(items);
+        if(!ST.hasMore) removeLoadingSlot();
         return items;
       })
       .catch(function(e){
+        if(requestId !== ST.requestId || e.name === 'AbortError') return [];
         ST.loading = false;
+        ST.controller = null;
         var slot = container.querySelector('.loading-slot');
-        if(slot) slot.innerHTML = '<div class="loading"><div>'+esc(e.message)+'</div></div>';
+        if(slot) slot.innerHTML = '<div class="loading"><div>'+esc(e.message)+'</div><button class="retry">重试</button></div>';
+        return [];
       });
+  }
+
+  function removeLoadingSlot(){
+    var slot = container.querySelector('.loading-slot');
+    if(slot) slot.remove();
   }
 
   function renderNew(items){
@@ -162,6 +184,7 @@ html,body{background:var(--bg);color:var(--text);
       item.className = 'video-item';
       item.dataset.bvid = v.bvid;
       item.dataset.loaded = '0';
+      cleanupObserver.observe(item);
       var cover = v.cover ? '/api/img?u='+encodeURIComponent(v.cover) : '';
       item.innerHTML =
         (cover ? '<div class="bg-cover" style="background-image:url('+cover+')"></div>' : '') +
@@ -182,15 +205,18 @@ html,body{background:var(--bg);color:var(--text);
       ST.observer.observe(item);
     });
 
-    var newSlot = document.createElement('div');
-    newSlot.className = 'video-item loading-slot';
-    newSlot.innerHTML = '<div class="loading"><div class="spinner"></div><div>more</div></div>';
-    container.appendChild(newSlot);
-    ST.observer.observe(newSlot);
+    if(ST.hasMore){
+      var newSlot = document.createElement('div');
+      newSlot.className = 'video-item loading-slot';
+      newSlot.innerHTML = '<div class="loading"><div class="spinner"></div><div>more</div></div>';
+      container.appendChild(newSlot);
+      ST.observer.observe(newSlot);
+    }
   }
 
   function loadVideo(item){
     if(item.dataset.loaded === '1') return;
+    if(Number(item.dataset.retryAfter || 0) > Date.now()) return;
     item.dataset.loaded = '1';
     var video = item.querySelector('video');
     var loading = item.querySelector('.loading');
@@ -205,7 +231,9 @@ html,body{background:var(--bg);color:var(--text);
         if(loading) loading.style.display = 'none';
       })
       .catch(function(e){
-        if(loading) loading.innerHTML = '<div>'+esc(e.message)+'</div>';
+        item.dataset.loaded = '0';
+        item.dataset.retryAfter = String(Date.now() + 5000);
+        if(loading) loading.innerHTML = '<div>'+esc(e.message)+'</div><div>5 秒后可重试</div>';
       });
   }
 
@@ -275,33 +303,25 @@ html,body{background:var(--bg);color:var(--text);
     setTimeout(function(){ h.remove(); }, 800);
   }
 
-  // 定期清理：只保留当前屏 ±1 的 video，更远的销毁 src 释放内存
-  setInterval(function(){
-    var items = container.querySelectorAll('.video-item:not(.loading-slot)');
-    var cur = -1, curEl = null;
-    for(var i = 0; i < items.length; i++){
-      var r = items[i].getBoundingClientRect();
-      if(r.top <= window.innerHeight/2 && r.bottom >= window.innerHeight/2){
-        cur = i; curEl = items[i]; break;
+  // IntersectionObserver 负责暂停并释放远离视口的视频资源，避免定时全量扫描。
+  var cleanupObserver = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if(entry.isIntersecting || entry.target.classList.contains('loading-slot')) return;
+      var item = entry.target;
+      var video = item.querySelector('video');
+      if(video && item.dataset.loaded === '1'){
+        if(!video.paused) video.pause();
+        if(video.src){ video.removeAttribute('src'); video.load(); }
+        item.dataset.loaded = '0';
       }
-    }
-    if(cur < 0) return;
-    for(var i = 0; i < items.length; i++){
-      var v = items[i].querySelector('video');
-      if(!v) continue;
-      if(Math.abs(i - cur) > 1){
-        if(!v.paused) v.pause();
-        if(v.src){ v.removeAttribute('src'); v.load(); }
-        items[i].dataset.loaded = '0';
-      }
-    }
-  }, 2000);
+    });
+  }, {root:container, rootMargin:'100% 0px'});
 
   ST.observer = new IntersectionObserver(function(entries){
     entries.forEach(function(entry){
       var item = entry.target;
       if(item.classList.contains('loading-slot')){
-        if(entry.isIntersecting && ST.items.length > 0 && !ST.loading){
+        if(entry.isIntersecting && ST.hasMore && !ST.loading){
           ST.page += 1;
           fetchShorts(ST.q, ST.page);
         }
@@ -329,11 +349,17 @@ html,body{background:var(--bg);color:var(--text);
       e.preventDefault();
       var q = qInput.value.trim();
       if(!q) return;
+      if(ST.controller) ST.controller.abort();
+      ST.requestId += 1;
+      ST.loading = false; ST.hasMore = true; ST.controller = null;
       ST.q = q; ST.page = 1; ST.items = [];
       container.innerHTML = '';
       writeQ(q);
       fetchShorts(q, 1);
     }
+  });
+  container.addEventListener('click', function(e){
+    if(e.target.closest('.retry')) fetchShorts(ST.q, ST.page);
   });
 })();
 </script>

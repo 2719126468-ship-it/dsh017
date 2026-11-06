@@ -32,12 +32,14 @@
 
 访问：`http://<局域网IP>:8092/`
 
+> 安全提示：主服务监听局域网网卡（`0.0.0.0`），请只在可信家庭/个人网络使用，不要直接暴露到公网或不可信公共 Wi-Fi。代理接口仅允许 HTTPS 的 B 站/CDN 域名，并拒绝解析到非公网 IP 的地址。
+
 ## 快速开始
 
 ```bash
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 cp run_bili.sh.example run_bili.sh
-# 编辑 run_bili.sh，把 YOUR_ZHIPU_KEY_HERE 换成真 Key
+# 编辑 run_bili.sh，设置 ZHIPU_API_KEY；也可在启动前通过环境变量传入
 chmod +x run_bili.sh
 nohup ./run_bili.sh > /dev/null 2>&1 &
 
@@ -45,6 +47,20 @@ nohup python3 -u tarot_server.py > tarot.log 2>&1 &
 nohup python3 -u novel_server.py > novel.log 2>&1 &
 nohup python3 -u hub_server.py   > hub.log   2>&1 &
 ```
+
+### 数据目录与测试
+
+默认运行数据保存在项目目录的 `data/`（数据库、备份和日志），预设保存在 `presets/`。可通过 `DSH017_DATA_DIR`、`DSH017_DB_PATH`、`DSH017_BACKUP_DIR`、`DSH017_PRESET_DIR` 自定义位置。无需以 root 身份运行。首次启动时，如果新数据目录为空且旧的 `/root/bili_data.db` 或 `/root/presets` 仍存在，会自动复制旧数据库和缺失的自定义预设；已有新数据不会被覆盖。
+
+本地验证：
+
+```bash
+python3 -m compileall -q app *.py tests
+python3 -m unittest discover -s tests -v
+bash -n run_bili.sh.example
+```
+
+GitHub Actions 会在 push、PR 和手动触发时运行 Python 3.10–3.12 测试。
 
 目录结构
 

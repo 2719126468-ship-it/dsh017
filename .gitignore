@@ -1,5 +1,6 @@
-# 数据库
+# 数据库与运行数据
 *.db
+data/
 
 # 日志
 *.log
@@ -28,6 +29,8 @@ f_inject*.py
 f_fix*.py
 finalize.py
 test_*.py
+!tests/
+!tests/**/*.py
 probe_*.py
 debug_*.py
 analyze_*.py

@@ -6,10 +6,22 @@ import json
 import time
 import sqlite3
 import threading
+import shutil
 
 # ==================== SQLite 持久化 ====================
-_DB_PATH = "/root/bili_data.db"
-_DB_LOCK = threading.Lock()
+_DATA_DIR = os.path.abspath(os.environ.get(
+    "DSH017_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+))
+_DB_PATH = os.path.abspath(os.environ.get("DSH017_DB_PATH", os.path.join(_DATA_DIR, "bili_data.db")))
+os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
+# One-time migration from the previous fixed container path; never overwrite new data.
+_LEGACY_DB_PATH = "/root/bili_data.db"
+if not os.environ.get("DSH017_DB_PATH") and not os.path.exists(_DB_PATH) and os.path.isfile(_LEGACY_DB_PATH):
+    try:
+        shutil.copy2(_LEGACY_DB_PATH, _DB_PATH)
+    except OSError:
+        pass
+_DB_LOCK = threading.RLock()
 
 def _db_conn():
     c = sqlite3.connect(_DB_PATH, timeout=10)
@@ -164,7 +176,7 @@ def _snapshot_file(c, file_id, content, source, base_version):
 _db_init_workspace()
 
 # ==================== SQLite 每日备份 ====================
-_BACKUP_DIR = "/root/backup"
+_BACKUP_DIR = os.path.abspath(os.environ.get("DSH017_BACKUP_DIR", os.path.join(_DATA_DIR, "backup")))
 _BACKUP_KEEP = 7
 
 def _db_backup_once():

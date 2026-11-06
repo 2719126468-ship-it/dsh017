@@ -130,12 +130,16 @@ _WORKSPACE_ROOT = "/workspace/"
 _AUTO_BLOCK_STREAK = 0
 _AUTO_DOWNGRADED = False
 _AUTO_BLOCK_THRESHOLD = 3
+_AUTO_GUARD_LOCK = threading.Lock()
 
 
 def _ws_scope_check(file_name):
-    """作用域检查：文件名拼成虚拟路径，是否在 project_root 内"""
-    full_path = _WORKSPACE_ROOT + (file_name or "")
-    return full_path.startswith(_WORKSPACE_ROOT) and ".." not in full_path
+    """Validate a virtual workspace filename; no filesystem path is accepted."""
+    if not isinstance(file_name, str) or not file_name or len(file_name) > 180:
+        return False
+    if file_name in (".", "..") or any(ch in file_name for ch in ("/", "\\", "\x00")):
+        return False
+    return all(ord(ch) >= 32 for ch in file_name)
 
 def _ws_rule_lookup(file_name, operation):
     """规则层：deny > ask > allow，返回 action 或 None"""
@@ -157,22 +161,25 @@ def _ws_rule_lookup(file_name, operation):
             return r["action"]
         if fp.endswith("*") and file_name.startswith(fp[:-1]):
             return r["action"]
-    return None
+    # No matching rule must never silently grant automatic write permission.
+    return "ask"
 
 def _ws_auto_guard():
-    """断路器：连续被拦达阈值则降级"""
-    global _AUTO_BLOCK_STREAK, _AUTO_DOWNGRADED
-    return _AUTO_DOWNGRADED or _AUTO_BLOCK_STREAK >= _AUTO_BLOCK_THRESHOLD
+    """线程安全的自动编辑断路器。"""
+    with _AUTO_GUARD_LOCK:
+        return _AUTO_DOWNGRADED or _AUTO_BLOCK_STREAK >= _AUTO_BLOCK_THRESHOLD
 
 def _ws_auto_on_block():
     global _AUTO_BLOCK_STREAK, _AUTO_DOWNGRADED
-    _AUTO_BLOCK_STREAK += 1
-    if _AUTO_BLOCK_STREAK >= _AUTO_BLOCK_THRESHOLD:
-        _AUTO_DOWNGRADED = True
+    with _AUTO_GUARD_LOCK:
+        _AUTO_BLOCK_STREAK += 1
+        if _AUTO_BLOCK_STREAK >= _AUTO_BLOCK_THRESHOLD:
+            _AUTO_DOWNGRADED = True
 
 def _ws_auto_on_success():
     global _AUTO_BLOCK_STREAK
-    _AUTO_BLOCK_STREAK = 0
+    with _AUTO_GUARD_LOCK:
+        _AUTO_BLOCK_STREAK = 0
 
 # ==================== 工作区 API ====================
 

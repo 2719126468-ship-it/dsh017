@@ -71,10 +71,18 @@ def api_x():
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"code": -1, "message": "请提供推文 URL"})
-    # 自动将 x.com/twitter.com 转换为 api.fxtwitter.com
-    api_url = url.replace("x.com", "api.fxtwitter.com").replace("twitter.com", "api.fxtwitter.com")
+    from urllib.parse import urlsplit
+    import re
+    parsed = urlsplit(url)
+    if (parsed.scheme != "https" or (parsed.hostname or "").lower() not in
+            ("x.com", "www.x.com", "twitter.com", "www.twitter.com") or
+            not re.fullmatch(r"/[^/]+/status/\d+/?", parsed.path)):
+        return jsonify({"code": -1, "message": "仅支持有效的 X/Twitter 推文链接"}), 400
+    if parsed.query or parsed.fragment:
+        return jsonify({"code": -1, "message": "推文链接不能包含额外参数"}), 400
+    api_url = "https://api.fxtwitter.com" + parsed.path
     try:
-        r = client.s.get(api_url, timeout=15)
+        r = client.s.get(api_url, timeout=(5, 15), allow_redirects=False)
         data = r.json()
         if data.get("code") == 200:
             t = data.get("tweet", {})
