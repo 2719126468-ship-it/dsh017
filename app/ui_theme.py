@@ -221,10 +221,6 @@ html[data-dsh-theme="chatgpt"][data-theme="dark"] .msg-row.user .msg-body {
   background: var(--bg-soft) !important;
   color: var(--text) !important;
 }
-html[data-dsh-theme="claude"] #themeBtn,
-html[data-dsh-theme="chatgpt"] #themeBtn {
-  display: none !important;
-}
 html[data-dsh-theme="claude"] :focus-visible,
 html[data-dsh-theme="chatgpt"] :focus-visible {
   outline: 2px solid var(--accent) !important;
@@ -931,6 +927,196 @@ html[data-dsh-theme="claude"] .mask {
   border-radius: 9px;
   font-size: 16px;
 }
+/* DSH native identity: layered ink/navy surfaces and blue-violet accents. */
+html[data-dsh-theme="original"][data-dsh-mode="light"] {
+  color-scheme: light;
+  --bg:#F4F6FC; --surface:#FFFFFF; --text:#171C2B; --text-2:#515B73;
+  --muted:#8790A6; --line:rgba(48,66,112,.11); --line-2:rgba(48,66,112,.18);
+  --accent:#536DFA; --accent-hover:#4056DE; --accent-soft:rgba(83,109,250,.12);
+  --brand:#536DFA; --bg-soft:#E9EDF8; --bg-hover:#DDE4F5; --mask-fade:#F4F6FC;
+  --topbar-bg:rgba(255,255,255,.86); --dsh-shadow:0 8px 30px rgba(49,68,125,.08);
+}
+html[data-dsh-theme="original"][data-dsh-mode="dark"] {
+  color-scheme: dark;
+  --bg:#0C1220; --surface:#141D31; --text:#ECF1FF; --text-2:#B2BED8;
+  --muted:#7583A3; --line:rgba(150,174,232,.12); --line-2:rgba(150,174,232,.20);
+  --accent:#8295FF; --accent-hover:#A0ADFF; --accent-soft:rgba(130,149,255,.15);
+  --brand:#8295FF; --bg-soft:#121B2E; --bg-hover:#1C2942; --mask-fade:#0C1220;
+  --topbar-bg:rgba(17,26,44,.9); --dsh-shadow:0 10px 32px rgba(0,0,0,.25);
+}
+html[data-dsh-mode="dark"] { color-scheme:dark; }
+html[data-dsh-mode="light"] { color-scheme:light; }
+html[data-dsh-mode="dark"] body {
+  background:var(--bg) !important;
+  color:var(--text) !important;
+}
+html[data-dsh-mode="dark"] input,
+html[data-dsh-mode="dark"] textarea,
+html[data-dsh-mode="dark"] select {
+  color:var(--text) !important;
+  background:var(--surface) !important;
+  border-color:var(--line-2) !important;
+}
+html[data-dsh-mode="dark"] input::placeholder,
+html[data-dsh-mode="dark"] textarea::placeholder { color:var(--muted) !important; }
+
+/* Claude: warm charcoal dark mode, paper-like light mode. */
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] {
+  color-scheme:dark;
+  --bg:#242321; --surface:#2D2B28; --text:#F0EEE9; --text-2:#C5C0B7;
+  --muted:#969087; --line:rgba(236,229,216,.10); --line-2:rgba(236,229,216,.17);
+  --glass-bg:#2D2B28; --glass:#2D2B28; --glass-border:rgba(236,229,216,.12);
+  --accent:#D98B6B; --accent-hover:#E4A083; --accent-soft:rgba(217,139,107,.14);
+  --brand:#D98B6B; --bg-soft:#1E1D1B; --bg-hover:#37342F;
+  --mask-fade:#242321; --topbar-bg:#2D2B28; --dark:#F0EEE9; --dark-text:#242321;
+  --dsh-shadow:0 3px 18px rgba(0,0,0,.16);
+}
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] body,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .main,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .chat-pane,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .messages-wrap,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .canvas-pane {
+  background:#242321 !important; color:#F0EEE9 !important;
+}
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .sidebar {
+  background:#1E1D1B !important; border-color:rgba(236,229,216,.09) !important;
+}
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .topbar,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .sb-head,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .sb-foot,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .canvas-header {
+  background:#242321 !important; color:#F0EEE9 !important; border-color:rgba(236,229,216,.10) !important;
+}
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .composer {
+  background:#302E2A !important; border-color:rgba(236,229,216,.19) !important;
+  box-shadow:0 5px 22px rgba(0,0,0,.22) !important;
+}
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .composer textarea,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .canvas-editor {
+  background:transparent !important; color:#F0EEE9 !important;
+}
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .think-panel,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .canvas-btn,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] #presetSel,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] #modelSel,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] #effortSel,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] #permModeSel {
+  background:#302E2A !important; color:#E7E2D9 !important; border-color:rgba(236,229,216,.15) !important;
+}
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .msg-row.user .msg-body {
+  background:#3A3731 !important; color:#F0EEE9 !important; border-color:rgba(236,229,216,.07) !important;
+}
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .msg-row.assistant .msg-body,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .canvas-title,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .sb-head h2,
+html[data-dsh-theme="claude"][data-dsh-mode="dark"] .topbar h1 { color:#F0EEE9 !important; }
+
+/* ChatGPT: neutral graphite surfaces, compact chrome and a soft floating composer. */
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] {
+  color-scheme:dark;
+  --bg:#212121; --surface:#2F2F2F; --text:#ECECEC; --text-2:#C5C5C5;
+  --muted:#929292; --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.15);
+  --glass-bg:#292929; --glass:#292929; --glass-border:rgba(255,255,255,.09);
+  --accent:#ECECEC; --accent-hover:#FFFFFF; --accent-soft:rgba(255,255,255,.10);
+  --brand:#ECECEC; --bg-soft:#171717; --bg-hover:#303030;
+  --mask-fade:#212121; --topbar-bg:#212121; --dark:#ECECEC; --dark-text:#171717;
+  --dsh-shadow:0 4px 20px rgba(0,0,0,.20);
+}
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] body,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .main,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .chat-pane,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .messages-wrap,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .canvas-pane {
+  background:#212121 !important; color:#ECECEC !important;
+}
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .sidebar {
+  background:#171717 !important; border-color:#303030 !important;
+}
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .topbar,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .sb-head,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .sb-foot,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .canvas-header {
+  background:#212121 !important; color:#ECECEC !important; border-color:#343434 !important;
+}
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .composer {
+  background:#303030 !important; border-color:#424242 !important;
+  box-shadow:0 4px 18px rgba(0,0,0,.2) !important;
+}
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .composer textarea,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .canvas-editor {
+  background:transparent !important; color:#ECECEC !important;
+}
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .think-panel,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .canvas-btn,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] #presetSel,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] #modelSel,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] #effortSel,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] #permModeSel {
+  background:#2B2B2B !important; color:#E5E5E5 !important; border-color:#454545 !important;
+}
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .msg-row.user .msg-body {
+  background:#303030 !important; color:#ECECEC !important; border:0 !important;
+}
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .msg-row.assistant .msg-body,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .canvas-title,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .sb-head h2,
+html[data-dsh-theme="chatgpt"][data-dsh-mode="dark"] .topbar h1 { color:#ECECEC !important; }
+
+/* DSH chat: luminous blue-violet accent, translucent navigation, gradient actions. */
+html[data-dsh-theme="original"] .shell,
+html[data-dsh-theme="original"] .main { background:var(--bg) !important; }
+html[data-dsh-theme="original"] .sidebar {
+  background:var(--bg-soft) !important; border-right:1px solid var(--line) !important;
+  box-shadow:inset -1px 0 rgba(120,145,255,.04) !important;
+}
+html[data-dsh-theme="original"] .topbar {
+  background:var(--topbar-bg) !important; border-bottom:1px solid var(--line) !important;
+  backdrop-filter:blur(18px) saturate(1.35); -webkit-backdrop-filter:blur(18px) saturate(1.35);
+}
+html[data-dsh-theme="original"] .composer {
+  background:var(--surface) !important; border:1px solid var(--line-2) !important;
+  border-radius:22px !important; box-shadow:var(--dsh-shadow),0 0 0 1px rgba(83,109,250,.035) !important;
+}
+html[data-dsh-theme="original"] .composer button:not(.btn-stop) {
+  background:linear-gradient(135deg,#647CFF,#8A63E9) !important;
+  color:#fff !important; box-shadow:0 5px 16px rgba(99,111,247,.30);
+}
+html[data-dsh-theme="original"] .msg-row.user .msg-body {
+  background:linear-gradient(135deg,rgba(93,119,255,.15),rgba(145,105,235,.11)) !important;
+  color:var(--text) !important; border:1px solid rgba(119,133,255,.18) !important;
+  border-radius:17px !important;
+}
+html[data-dsh-theme="original"] .canvas-pane,
+html[data-dsh-theme="original"] .canvas-header,
+html[data-dsh-theme="original"] .think-panel {
+  background:var(--surface) !important; border-color:var(--line) !important;
+}
+html[data-dsh-theme="original"] .sb-item.new {
+  border:1px solid var(--line-2) !important; box-shadow:var(--dsh-shadow);
+}
+html[data-dsh-theme="original"] .sb-item:hover,
+html[data-dsh-theme="original"] .act:hover { background:var(--bg-hover) !important; }
+html[data-dsh-theme="original"] .canvas-btn.primary,
+html[data-dsh-theme="original"] #themeBtn {
+  background:linear-gradient(135deg,#647CFF,#8A63E9) !important; color:#fff !important;
+  border:0 !important; box-shadow:0 4px 12px rgba(99,111,247,.24);
+}
+html[data-dsh-theme="original"] .messages-wrap {
+  background:
+    radial-gradient(ellipse 70% 38% at 50% 0%,rgba(104,124,255,.055),transparent 72%),
+    var(--bg) !important;
+}
+html[data-dsh-theme="original"] .msg-row.assistant .msg-body { color:var(--text) !important; }
+html[data-dsh-theme="original"] .model {
+  border:1px solid var(--line-2); border-radius:999px; padding:4px 8px;
+}
+html[data-dsh-theme="original"] #themeBtn { display:inline-flex !important; }
+@media(prefers-reduced-motion:no-preference) {
+  html[data-dsh-theme="original"] .composer,
+  html[data-dsh-theme="claude"] .composer,
+  html[data-dsh-theme="chatgpt"] .composer { transition:background-color .24s ease,border-color .24s ease,box-shadow .24s ease; }
+}
+
 </style>
 """
 
@@ -940,98 +1126,164 @@ _THEME_WIDGET = r"""
           aria-label="切换全站主题" aria-expanded="false"
           aria-controls="dsh017-theme-panel" title="全站主题">◐</button>
   <div id="dsh017-theme-panel" aria-hidden="true">
-    <label for="dsh017-theme-select">全站外观主题</label>
+    <label for="dsh017-theme-select">界面风格</label>
     <select id="dsh017-theme-select">
       <option value="original">DSH 原生</option>
       <option value="claude">Claude 风格</option>
       <option value="chatgpt">ChatGPT 风格</option>
+    </select>
+    <label for="dsh017-mode-select" class="dsh017-mode-label">颜色模式</label>
+    <select id="dsh017-mode-select">
+      <option value="system">跟随系统</option>
+      <option value="light">浅色</option>
+      <option value="dark">深色</option>
     </select>
   </div>
 </div>
 <script id="dsh017-global-theme-script">
 (function () {
   "use strict";
-  var cookieName = "dsh017_theme";
-  var allowed = {original: true, claude: true, chatgpt: true};
+  var themeCookie = "dsh017_theme";
+  var modeCookie = "dsh017_mode";
+  var allowedThemes = {original:true, claude:true, chatgpt:true};
+  var allowedModes = {system:true, light:true, dark:true};
   var root = document.documentElement;
+  var currentModeChoice = "system";
 
-  function cookieTheme() {
+  function readCookie(name) {
     var parts = document.cookie ? document.cookie.split(";") : [];
-    for (var i = 0; i < parts.length; i++) {
-      var part = parts[i].trim();
-      if (part.indexOf(cookieName + "=") === 0) {
-        var value = part.slice(cookieName.length + 1);
-        return allowed[value] ? value : null;
-      }
+    for (var i=0;i<parts.length;i++) {
+      var part=parts[i].trim();
+      if(part.indexOf(name+"=")===0) return part.slice(name.length+1);
     }
     return null;
   }
-
-  function applyTheme(value, persist) {
-    if (!allowed[value]) value = "original";
-    if (persist) root.classList.add("dsh-theme-changing");
-    root.setAttribute("data-dsh-theme", value);
-    var select = document.getElementById("dsh017-theme-select");
-    if (select) select.value = value;
-    if (persist) {
+  function prefersDark() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+  function saveCookie(name,value) {
+    try {
+      document.cookie=name+"="+value+"; Max-Age=31536000; Path=/; SameSite=Lax"+
+        (location.protocol==="https:"?"; Secure":"");
+    } catch(e) {}
+  }
+  function applyTheme(value,persist) {
+    if(!allowedThemes[value]) value="original";
+    if(persist) root.classList.add("dsh-theme-changing");
+    root.setAttribute("data-dsh-theme",value);
+    var select=document.getElementById("dsh017-theme-select");
+    if(select) select.value=value;
+    if(persist) {
+      saveCookie(themeCookie,value);
+      try { localStorage.setItem(themeCookie,value); } catch(e) {}
+      window.setTimeout(function(){root.classList.remove("dsh-theme-changing");},420);
+    }
+    updateChatBrand(value);
+  }
+  function applyMode(choice,persist) {
+    if(!allowedModes[choice]) choice="system";
+    currentModeChoice=choice;
+    var effective=(choice==="system"?(prefersDark()?"dark":"light"):choice);
+    root.setAttribute("data-dsh-mode",effective);
+    root.setAttribute("data-theme",effective);
+    root.setAttribute("data-dsh-mode-choice",choice);
+    var select=document.getElementById("dsh017-mode-select");
+    if(select) select.value=choice;
+    var btn=document.getElementById("themeBtn");
+    if(btn) {
+      btn.textContent=effective==="dark"?"☀":"☾";
+      btn.title=effective==="dark"?"切换浅色模式":"切换深色模式";
+      btn.setAttribute("aria-label",btn.title);
+    }
+    if(persist) {
+      root.classList.add("dsh-theme-changing");
+      saveCookie(modeCookie,choice);
       try {
-        document.cookie = cookieName + "=" + value +
-          "; Max-Age=31536000; Path=/; SameSite=Lax" +
-          (location.protocol === "https:" ? "; Secure" : "");
-        try { localStorage.setItem(cookieName, value); } catch (e) {}
-      } catch (e) {}
-      window.setTimeout(function () {
-        root.classList.remove("dsh-theme-changing");
-      }, 420);
+        localStorage.setItem(modeCookie,choice);
+        localStorage.setItem("theme",effective);
+      } catch(e) {}
+      window.setTimeout(function(){root.classList.remove("dsh-theme-changing");},420);
     }
   }
-
-  var initial = root.getAttribute("data-dsh-theme") || cookieTheme();
-  if (!allowed[initial]) {
-    try {
-      var stored = localStorage.getItem(cookieName);
-      if (allowed[stored]) initial = stored;
-    } catch (e) {}
+  function updateChatBrand(theme) {
+    var labels={original:"DSH",claude:"Claude",chatgpt:"ChatGPT"};
+    var label=labels[theme]||"DSH";
+    var title=document.querySelector(".topbar h1");
+    var side=document.querySelector(".sb-head h2");
+    if(title) title.textContent=label;
+    if(side) side.textContent=label;
+    if(title || side) document.title=label+" · DSH-017";
+    var foot=document.querySelector(".sb-foot");
+    if(foot) foot.textContent="GLM-4.7-FLASH · "+(theme==="original"?"DSH 原生":label+" 风格界面");
   }
-  applyTheme(initial || "original", false);
 
-  var toggle = document.getElementById("dsh017-theme-toggle");
-  var panel = document.getElementById("dsh017-theme-panel");
-  var select = document.getElementById("dsh017-theme-select");
-  var widget = document.getElementById("dsh017-theme-switcher");
-  var chatTopbar = document.querySelector(".topbar");
-  if (widget && chatTopbar) {
+  var initialTheme=root.getAttribute("data-dsh-theme")||readCookie(themeCookie);
+  if(!allowedThemes[initialTheme]) {
+    try { initialTheme=localStorage.getItem(themeCookie); } catch(e) {}
+  }
+  applyTheme(initialTheme||"original",false);
+
+  var initialMode=readCookie(modeCookie);
+  if(!allowedModes[initialMode]) {
+    try { initialMode=localStorage.getItem(modeCookie); } catch(e) {}
+  }
+  if(!allowedModes[initialMode]) {
+    try {
+      var legacy=localStorage.getItem("theme");
+      initialMode=(legacy==="dark"||legacy==="light")?legacy:"system";
+    } catch(e) { initialMode="system"; }
+  }
+  applyMode(initialMode||"system",false);
+
+  var media=window.matchMedia?window.matchMedia("(prefers-color-scheme: dark)"):null;
+  if(media) {
+    var onSystemChange=function(){if(currentModeChoice==="system") applyMode("system",false);};
+    if(media.addEventListener) media.addEventListener("change",onSystemChange);
+    else if(media.addListener) media.addListener(onSystemChange);
+  }
+
+  var toggle=document.getElementById("dsh017-theme-toggle");
+  var panel=document.getElementById("dsh017-theme-panel");
+  var themeSelect=document.getElementById("dsh017-theme-select");
+  var modeSelect=document.getElementById("dsh017-mode-select");
+  var widget=document.getElementById("dsh017-theme-switcher");
+  var chatTopbar=document.querySelector(".topbar");
+  if(widget&&chatTopbar) {
     chatTopbar.appendChild(widget);
     widget.classList.add("dsh017-theme-embedded");
   }
-  if (!toggle || !panel || !select) return;
-
-  function setPanelOpen(open, returnFocus) {
-    panel.classList.toggle("open", open);
-    panel.setAttribute("aria-hidden", open ? "false" : "true");
-    toggle.setAttribute("aria-expanded", open ? "true" : "false");
-    if (open) select.focus();
-    else if (returnFocus) toggle.focus();
+  function setPanelOpen(open,returnFocus) {
+    panel.classList.toggle("open",open);
+    panel.setAttribute("aria-hidden",open?"false":"true");
+    toggle.setAttribute("aria-expanded",open?"true":"false");
+    if(open) themeSelect.focus();
+    else if(returnFocus) toggle.focus();
   }
-  toggle.addEventListener("click", function () {
-    setPanelOpen(!panel.classList.contains("open"), false);
-  });
-  select.addEventListener("change", function () {
-    applyTheme(select.value, true);
-    setPanelOpen(false, true);
-  });
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" && panel.classList.contains("open")) {
-      setPanelOpen(false, true);
-    }
-  });
-  document.addEventListener("click", function (event) {
-    if (panel.classList.contains("open") &&
-        !event.target.closest("#dsh017-theme-switcher")) {
-      setPanelOpen(false, false);
-    }
-  });
-})();
+  if(toggle&&panel&&themeSelect&&modeSelect) {
+    toggle.addEventListener("click",function(){setPanelOpen(!panel.classList.contains("open"),false);});
+    themeSelect.addEventListener("change",function(){applyTheme(themeSelect.value,true);});
+    modeSelect.addEventListener("change",function(){applyMode(modeSelect.value,true);});
+    document.addEventListener("keydown",function(event){
+      if(event.key==="Escape"&&panel.classList.contains("open")) setPanelOpen(false,true);
+    });
+    document.addEventListener("click",function(event){
+      if(panel.classList.contains("open")&&!event.target.closest("#dsh017-theme-switcher")) setPanelOpen(false,false);
+    });
+  }
+  var legacyModeButton=document.getElementById("themeBtn");
+  if(legacyModeButton) {
+    legacyModeButton.addEventListener("click",function(){
+      applyMode(root.getAttribute("data-dsh-mode")==="dark"?"light":"dark",true);
+    });
+  }
+  window.DSH017={
+    applyTheme:applyTheme,
+    applyMode:applyMode,
+    toggleMode:function(){applyMode(root.getAttribute("data-dsh-mode")==="dark"?"light":"dark",true);},
+    getTheme:function(){return root.getAttribute("data-dsh-theme")||"original";},
+    getMode:function(){return root.getAttribute("data-dsh-mode")||"light";}
+  };
+})();;
 </script>
 """
 
@@ -1066,15 +1318,15 @@ def install_theme_support(app):
             return response
 
         theme = request.cookies.get(_THEME_COOKIE, "")
+        mode = request.cookies.get("dsh017_mode", "")
+        import re
+        attrs = ""
         if theme in _ALLOWED_THEMES:
-            import re
-            html = re.sub(
-                r"<html\b",
-                '<html data-dsh-theme="' + theme + '"',
-                html,
-                count=1,
-                flags=re.IGNORECASE,
-            )
+            attrs += ' data-dsh-theme="' + theme + '"'
+        if mode in {"light", "dark"}:
+            attrs += ' data-dsh-mode="' + mode + '" data-theme="' + mode + '"'
+        if attrs:
+            html = re.sub(r"<html\\b", "<html" + attrs, html, count=1, flags=re.IGNORECASE)
 
         head_pos = html.lower().find("</head>")
         body_pos = html.lower().rfind("</body>")
