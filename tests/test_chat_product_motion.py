@@ -34,6 +34,21 @@ class ChatProductMotionTests(unittest.TestCase):
         self.assertIn("composer.classList.remove('is-streaming')", CHAT_HTML)
         self.assertIn("code.appendChild(state.codeTextNode)", CHAT_HTML)
 
+    def test_generation_can_be_stopped_and_keeps_partial_reply(self):
+        self.assertIn('id="stop"', CHAT_HTML)
+        self.assertIn("function stopGeneration()", CHAT_HTML)
+        self.assertIn("new AbortController()", CHAT_HTML)
+        self.assertIn("requestOptions.signal = activeController.signal", CHAT_HTML)
+        self.assertIn("activeReader.cancel()", CHAT_HTML)
+        self.assertIn("var stoppedBeforeRead = new Error('Generation stopped')", CHAT_HTML)
+        self.assertIn("stoppedSignal.name = 'AbortError'", CHAT_HTML)
+        self.assertIn("if(wasStopped)", CHAT_HTML)
+        self.assertIn("history.push({role:'assistant', content: fullText, fresh:true})", CHAT_HTML)
+        self.assertIn("stopBtn.onclick = stopGeneration", CHAT_HTML)
+        self.assertIn("stopBtn.hidden = true", CHAT_HTML)
+        self.assertIn(".composer #stop[hidden]{display:none}", CHAT_HTML)
+        self.assertIn("回复已停止", CHAT_HTML)
+
     def test_completed_assistant_messages_use_safe_dom_markdown_renderer(self):
         self.assertIn("function renderAssistantMarkdown(target, source)", CHAT_HTML)
         self.assertIn("function appendInlineMarkdown(parent, source)", CHAT_HTML)
