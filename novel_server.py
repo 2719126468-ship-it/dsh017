@@ -35,6 +35,13 @@ NOVEL_IMAGE_HOSTS = ("byteimg.com", "p6-tt.bytecdn.cn")
 NOVEL_MAX_QUERY_CHARS = 100
 NOVEL_MAX_PAGE = 100
 NOVEL_MAX_ID_CHARS = 128
+
+# 明文 HTTP 社区代理默认关闭；仅在明确接受搜索词泄露风险后手动启用。
+LEGACY_HTTP_SEARCH_PROXIES_ENV = "DSH017_NOVEL_LEGACY_HTTP_PROXIES"
+
+def _legacy_http_search_proxies_enabled():
+    value = os.environ.get(LEGACY_HTTP_SEARCH_PROXIES_ENV, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 BASE_HEADERS = {"User-Agent": UA, "Accept": "application/json, text/plain, */*",
@@ -110,29 +117,39 @@ class NovelClient:
         import json
         offset = (page - 1) * 10
 
-        # ========== 策略 1：第三方代理 IP（社区可用） ==========
-        proxies = [
-            ("proxy-101", "http://101.35.133.34:5000/api/search",
-             {"query": keyword, "offset": offset}),
-            ("proxy-112", "http://112.126.27.62:6889/api/search",
-             {"query": keyword, "offset": offset, "platform": "fanqie"}),
-        ]
-        for name, url, params in proxies:
-            try:
-                r = self.s.get(url, params=params, timeout=15)
-                if r.status_code == 200 and r.text.strip():
-                    data = r.json()
-                    books = self._extract_books(data)
-                    if books:
-                        print(f"✅ {name} 命中 {len(books)} 本")
-                        return books
-                    print(f"⚠️ {name} 结构不识别，前 300 字符: {r.text[:300]}")
-                else:
-                    print(f"⚠️ {name} HTTP {r.status_code}")
-            except Exception as e:
-                print(f"⚠️ {name} 异常: {type(e).__name__}: {str(e)[:80]}")
+        # ========== 可选策略：第三方明文 HTTP 社区代理 ==========
+        # 默认禁用，避免将用户搜索关键词发送给未经验证的第三方主机。
+        if _legacy_http_search_proxies_enabled():
+            print(
+                "⚠️ 已启用旧版 HTTP 搜索代理：搜索关键词将以明文发送至第三方服务器"
+            )
+            proxies = [
+                ("proxy-101", "http://101.35.133.34:5000/api/search",
+                 {"query": keyword, "offset": offset}),
+                ("proxy-112", "http://112.126.27.62:6889/api/search",
+                 {"query": keyword, "offset": offset, "platform": "fanqie"}),
+            ]
+            for name, url, params in proxies:
+                try:
+                    r = self.s.get(url, params=params, timeout=15)
+                    if r.status_code == 200 and r.text.strip():
+                        data = r.json()
+                        books = self._extract_books(data)
+                        if books:
+                            print(f"✅ {name} 命中 {len(books)} 本")
+                            return books
+                        print(f"⚠️ {name} 结构不识别，前 300 字符: {r.text[:300]}")
+                    else:
+                        print(f"⚠️ {name} HTTP {r.status_code}")
+                except Exception as e:
+                    print(f"⚠️ {name} 异常: {type(e).__name__}: {str(e)[:80]}")
+        else:
+            print(
+                "ℹ️ 已跳过旧版明文 HTTP 搜索代理；如明确接受关键词泄露风险，"
+                "可设置 DSH017_NOVEL_LEGACY_HTTP_PROXIES=1 后重启服务"
+            )
 
-        # ========== 策略 2：novel.snssdk.com 免签名 tab/v ==========
+        # ========== 策略：novel.snssdk.com 官方 HTTPS tab/v ==========
         try:
             url = "https://novel.snssdk.com/reading/bookapi/search/tab/v"
             params = {
@@ -152,7 +169,7 @@ class NovelClient:
         except Exception as e:
             print(f"⚠️ snssdk-tab 异常: {type(e).__name__}: {str(e)[:80]}")
 
-        raise RuntimeError("所有搜索策略均失败（代理 + snssdk）")
+        raise RuntimeError("搜索失败（官方 HTTPS；旧版明文 HTTP 代理默认禁用）")
 
     def _extract_books(self, data):
         """通用书籍列表提取"""
