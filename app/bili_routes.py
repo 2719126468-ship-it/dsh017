@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 bili_bp = Blueprint('bili', __name__)
 
+_MAX_SEARCH_KEYWORD_CHARS = 100
+_MAX_SEARCH_PAGE = 100
+_MAX_AUDIO_BYTES = 128 * 1024 * 1024
+_MEDIA_HOSTS = ("bilivideo.com", "bilivideo.cn", "hdslb.com", "bilibili.com")
+
 def _safe_unlink(path):
     try:
         os.unlink(path)
@@ -29,6 +34,8 @@ def api_suggest():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify({"code": 0, "items": []})
+    if len(q) > _MAX_SEARCH_KEYWORD_CHARS:
+        return jsonify({"code": -1, "message": "关键词不能超过100个字符"}), 400
     try:
         r = client.s.get("https://s.search.bilibili.com/main/suggest",
                          params={"term": q, "main_ver": "v1"},
@@ -69,16 +76,26 @@ def api_search():
     q=request.args.get("q","").strip()
     if not q:
         return jsonify({"code":-1,"message":"空关键词"})
-    try: page=int(request.args.get("page",1))
-    except: page=1
+    if len(q) > _MAX_SEARCH_KEYWORD_CHARS:
+        return jsonify({"code":-1,"message":"关键词不能超过100个字符"}), 400
+    try:
+        page = int(request.args.get("page", 1))
+    except (TypeError, ValueError):
+        return jsonify({"code":-1,"message":"页码必须是整数"}), 400
+    if not 1 <= page <= _MAX_SEARCH_PAGE:
+        return jsonify({"code":-1,"message":"页码范围为1–100"}), 400
     order = request.args.get("order", "totalrank")
     if order not in ("totalrank", "click", "pubdate", "dm", "stow"):
         order = "totalrank"
     search_type = request.args.get("type", "video")
     if search_type not in ("video", "media_bangumi", "media_ft"):
         search_type = "video"
-    try: duration = int(request.args.get("duration", 0))
-    except: duration = 0
+    try:
+        duration = int(request.args.get("duration", 0))
+    except (TypeError, ValueError):
+        return jsonify({"code":-1,"message":"时长筛选必须是整数"}), 400
+    if duration not in (0, 1, 2, 3, 4):
+        return jsonify({"code":-1,"message":"无效的时长筛选"}), 400
     try:
         data = client.search(q, page, order, search_type, duration)
         if data.get("code") == 0:
@@ -174,9 +191,10 @@ def api_playurl():
 
 @bili_bp.route("/api/audio")
 def api_audio():
-    """下载音频：fnval=16 拿 M4A → FFmpeg 转 MP3（兼容老设备）"""
-    import subprocess, tempfile, os
-    from urllib.parse import quote
+    """Download an allowlisted audio stream, cap disk usage, then convert to MP3."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
 
     bvid = request.args.get("bvid", "").strip()
     if not bvid.startswith("BV"):
@@ -188,49 +206,94 @@ def api_audio():
         return "FFmpeg 不可用，无法转码", 500
 
     try:
-        try: cid = int(request.args.get("cid", 0)) or None
-        except: cid = None
+        try:
+            cid = int(request.args.get("cid", 0)) or None
+        except (TypeError, ValueError):
+            cid = None
         raw_url, quality, title = client.get_audio_url(bvid, cid)
     except Exception as e:
         return f"获取音频失败: {e}", 500
 
+    if not validate_remote_url(raw_url, allowed_suffixes=_MEDIA_HOSTS):
+        return "音频地址不安全或不受支持", 502
+
+    temp_dir = tempfile.TemporaryDirectory(prefix="dsh017-audio-")
+    tmp_m4a = Path(temp_dir.name) / "source.m4a"
+    tmp_mp3 = Path(temp_dir.name) / "converted.mp3"
+    retain_temp_dir = False
+    upstream = None
     headers = {"User-Agent": UA, "Referer": "https://www.bilibili.com/"}
 
-    tmp_m4a = tempfile.NamedTemporaryFile(suffix=".m4a", delete=False)
-    tmp_mp3 = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-    tmp_m4a.close(); tmp_mp3.close()
     try:
-        r = client.s.get(raw_url, headers=headers, stream=True, timeout=60)
-        if r.status_code != 200:
-            return f"下载音频失败 HTTP {r.status_code}", 500
-        with open(tmp_m4a.name, "wb") as f:
-            for chunk in r.iter_content(64 * 1024):
-                if chunk: f.write(chunk)
-        try: r.close()
-        except Exception: pass
+        upstream = client.s.get(
+            raw_url,
+            headers=headers,
+            stream=True,
+            timeout=(5, 30),
+            allow_redirects=False,
+        )
+        if upstream.status_code != 200:
+            return f"下载音频失败 HTTP {upstream.status_code}", 502
 
-        cmd = ["ffmpeg", "-y", "-i", tmp_m4a.name,
-               "-vn", "-acodec", "libmp3lame", "-ab", "192k",
-               "-ac", "2", "-ar", "44100", tmp_mp3.name]
+        try:
+            declared_size = upstream.headers.get("Content-Length")
+            if declared_size is not None and int(declared_size) > _MAX_AUDIO_BYTES:
+                return "音频文件超过128 MiB限制", 413
+        except (TypeError, ValueError):
+            return "上游音频长度无效", 502
+
+        downloaded = 0
+        with tmp_m4a.open("wb") as output:
+            for chunk in upstream.iter_content(64 * 1024):
+                if not chunk:
+                    continue
+                downloaded += len(chunk)
+                if downloaded > _MAX_AUDIO_BYTES:
+                    return "音频文件超过128 MiB限制", 413
+                output.write(chunk)
+
+        if downloaded == 0:
+            return "上游音频为空", 502
+
+        cmd = [
+            "ffmpeg", "-y", "-i", str(tmp_m4a),
+            "-vn", "-acodec", "libmp3lame", "-ab", "192k",
+            "-ac", "2", "-ar", "44100", str(tmp_mp3),
+        ]
         proc = subprocess.run(cmd, capture_output=True, timeout=180)
         if proc.returncode != 0:
             err = proc.stderr.decode("utf-8", "ignore")[-500:]
             return f"FFmpeg 转码失败: {err}", 500
+        if not tmp_mp3.is_file() or tmp_mp3.stat().st_size == 0:
+            return "FFmpeg 未生成有效音频文件", 500
 
-        safe_title = "".join(c for c in title if c not in r'\\/:*?"<>|').strip()[:80]
-        if not safe_title: safe_title = bvid
-        filename = safe_title + ".mp3"
-        disp = f"attachment; filename*=UTF-8''{quote(filename)}"
+        invalid_filename_chars = '\\/:*?"<>|'
+        safe_title = "".join(c for c in title if c not in invalid_filename_chars).strip()[:80]
+        if not safe_title:
+            safe_title = bvid
 
         from flask import send_file
-        response = send_file(tmp_mp3.name, mimetype="audio/mpeg",
-                             as_attachment=True, download_name=filename,
-                             conditional=True)
-        response.call_on_close(lambda: _safe_unlink(tmp_mp3.name))
+        response = send_file(
+            str(tmp_mp3),
+            mimetype="audio/mpeg",
+            as_attachment=True,
+            download_name=safe_title + ".mp3",
+            conditional=True,
+        )
+        response.call_on_close(temp_dir.cleanup)
+        retain_temp_dir = True
         return response
-
+    except Exception as e:
+        logger.exception("audio download or conversion failed")
+        return f"音频处理失败: {e}", 500
     finally:
-        _safe_unlink(tmp_m4a.name)
+        if upstream is not None:
+            try:
+                upstream.close()
+            except Exception:
+                pass
+        if not retain_temp_dir:
+            temp_dir.cleanup()
 
 @bili_bp.route("/api/img")
 def api_img():
@@ -258,43 +321,91 @@ def api_img():
 
 @bili_bp.route("/api/video")
 def api_video():
-    """下载 fnval=1 单文件 MP4"""
+    """Stream an MP4 only from an allowlisted public Bilibili media host."""
     bvid = request.args.get("bvid", "").strip()
     if not bvid.startswith("BV"):
         return "无效 bvid", 400
+
+    upstream = None
     try:
-        info = client.s.get("https://api.bilibili.com/x/web-interface/view",
-                            params={"bvid": bvid}, timeout=15).json()
+        info = client.s.get(
+            "https://api.bilibili.com/x/web-interface/view",
+            params={"bvid": bvid},
+            timeout=15,
+        ).json()
         if info.get("code") != 0:
-            return "详情失败: " + info.get("message", ""), 500
-        d = info["data"]
-        try: cid = int(request.args.get("cid", 0)) or d["cid"]
-        except: cid = d["cid"]
-        sp = client.sign({"bvid": bvid, "cid": cid, "qn": 80, "fnval": 1, "fourk": 1})
-        r = client.s.get("https://api.bilibili.com/x/player/wbi/playurl",
-                         params=sp, timeout=20).json()
-        if r.get("code") != 0:
-            return "播放地址失败: " + r.get("message", ""), 500
-        durl = (r.get("data") or {}).get("durl") or []
-        if not durl:
-            return "无 durl", 500
-        raw = durl[0]["url"]
-        headers = {"User-Agent": UA, "Referer": "https://www.bilibili.com/"}
-        r2 = client.s.get(raw, headers=headers, stream=True, timeout=30)
-        safe_title = "".join(c for c in d["title"] if c not in r'\\/:*?"<>|').strip()[:80] or bvid
+            return "详情失败: " + info.get("message", ""), 502
+        data = info["data"]
+        try:
+            cid = int(request.args.get("cid", 0)) or data["cid"]
+        except (TypeError, ValueError):
+            cid = data["cid"]
+
+        params = client.sign({
+            "bvid": bvid, "cid": cid, "qn": 80, "fnval": 1, "fourk": 1
+        })
+        playurl = client.s.get(
+            "https://api.bilibili.com/x/player/wbi/playurl",
+            params=params,
+            timeout=20,
+        ).json()
+        if playurl.get("code") != 0:
+            return "播放地址失败: " + playurl.get("message", ""), 502
+
+        durl = (playurl.get("data") or {}).get("durl") or []
+        if not durl or not isinstance(durl[0], dict):
+            return "无可用视频流", 502
+        raw_url = durl[0].get("url")
+        if not validate_remote_url(raw_url, allowed_suffixes=_MEDIA_HOSTS):
+            return "视频地址不安全或不受支持", 502
+
+        upstream = client.s.get(
+            raw_url,
+            headers={"User-Agent": UA, "Referer": "https://www.bilibili.com/"},
+            stream=True,
+            timeout=(5, 30),
+            allow_redirects=False,
+        )
+        if upstream.status_code != 200:
+            upstream.close()
+            upstream = None
+            return "上游视频服务拒绝了请求", 502
+
+        invalid_filename_chars = '\\/:*?"<>|'
+        safe_title = "".join(
+            c for c in data.get("title", "")
+            if c not in invalid_filename_chars
+        ).strip()[:80] or bvid
         from urllib.parse import quote
-        disp = f"attachment; filename*=UTF-8''{quote(safe_title + '.mp4')}"
-        def gen():
-            for chunk in r2.iter_content(chunk_size=64*1024):
-                if chunk: yield chunk
-        resp = Response(gen(), status=r2.status_code,
-                        content_type=r2.headers.get("Content-Type", "video/mp4"))
-        resp.headers["Content-Disposition"] = disp
-        for h in ("Content-Length", "Accept-Ranges"):
-            if h in r2.headers: resp.headers[h] = r2.headers[h]
-        return resp
+        disposition = f"attachment; filename*=UTF-8''{quote(safe_title + '.mp4')}"
+
+        def generate():
+            try:
+                for chunk in upstream.iter_content(chunk_size=64 * 1024):
+                    if chunk:
+                        yield chunk
+            finally:
+                upstream.close()
+
+        response = Response(
+            generate(),
+            status=200,
+            content_type=upstream.headers.get("Content-Type", "video/mp4"),
+        )
+        response.headers["Content-Disposition"] = disposition
+        for header in ("Content-Length", "Accept-Ranges"):
+            if header in upstream.headers:
+                response.headers[header] = upstream.headers[header]
+        response.call_on_close(upstream.close)
+        return response
     except Exception as e:
-        return "下载失败: " + str(e), 500
+        if upstream is not None:
+            try:
+                upstream.close()
+            except Exception:
+                pass
+        logger.exception("video download failed")
+        return "下载失败: " + str(e), 502
 
 @bili_bp.route("/api/proxy")
 def api_proxy():
