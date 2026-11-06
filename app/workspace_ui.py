@@ -24,7 +24,7 @@ html,body{height:100%;margin:0;background:var(--ws-bg);color:var(--ws-text);
 body{overflow:hidden}
 button,input,textarea,select{font:inherit}
 button{cursor:pointer}
-.ws-app{height:100dvh;min-height:0;display:flex;flex-direction:column;background:var(--ws-bg)}
+.ws-app{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;background:var(--ws-bg)}
 .ws-topbar{height:54px;flex:none;display:flex;align-items:center;gap:10px;padding:0 13px;
  background:var(--ws-surface);border-bottom:1px solid var(--ws-line);z-index:3}
 .ws-brand{display:flex;align-items:center;gap:9px;min-width:0;margin-right:auto}
@@ -108,6 +108,7 @@ button{cursor:pointer}
 .preview-content a{color:var(--ws-accent);text-decoration:none}
 .preview-content ul,.preview-content ol{padding-left:22px}
 .preview-empty{height:100%;display:grid;place-items:center;color:var(--ws-muted);font-size:12px}
+.callout{margin-top:14px;font-size:10px;line-height:1.7;color:var(--ws-muted)}
 .ws-empty{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:13px;
  color:var(--ws-muted);text-align:center;padding:25px}
 .ws-empty-icon{width:52px;height:52px;border:1px solid var(--ws-line);border-radius:17px;display:grid;place-items:center;
@@ -134,7 +135,7 @@ button{cursor:pointer}
 .ai-input-wrap{display:flex;gap:7px;align-items:flex-end;padding:8px;border:1px solid var(--ws-line-2);
  background:var(--ws-bg);border-radius:13px}
 #aiInput{flex:1;min-width:0;max-height:125px;min-height:35px;resize:vertical;border:0;outline:0;background:transparent;
- color:var(--ws-text);font:12px/1.6 inherit;font-family:inherit}
+ color:var(--ws-text);font-family:inherit;font-size:12px;line-height:1.6}
 #aiSend{width:34px;height:34px;border:0;border-radius:10px;background:var(--ws-accent);color:white;font-weight:700}
 #aiSend:disabled{opacity:.4}
 .pending-edit{border:1px solid rgba(228,181,109,.35);background:rgba(228,181,109,.08);padding:10px;border-radius:11px}
