@@ -31,6 +31,17 @@ printf '%s\n' "$$" > "$PID_FILE"
 WORKERS=()
 STOP_REQUESTED=0
 
+process_is_running() {
+  local process_id="$1"
+  local state
+  kill -0 "$process_id" 2>/dev/null || return 1
+  state="$(ps -p "$process_id" -o stat= 2>/dev/null | tr -d '[:space:]' || true)"
+  case "$state" in
+    Z*|X*) return 1 ;;
+  esac
+  return 0
+}
+
 rotate_log() {
   local log_file="$1"
   local size
@@ -67,9 +78,13 @@ run_service() {
     "$PYTHON_BIN" -u "$SCRIPT_DIR/$script_name" >> "$log_file" 2>&1 &
     child_pid=$!
 
-    while kill -0 "$child_pid" 2>/dev/null; do
-      sleep "$ROTATE_INTERVAL"
-      rotate_log "$log_file"
+    ROTATE_TICKS=0
+    while process_is_running "$child_pid"; do
+      sleep 1
+      ROTATE_TICKS=$((ROTATE_TICKS + 1))
+      if [ "$((ROTATE_TICKS % ROTATE_INTERVAL))" -eq 0 ]; then
+        rotate_log "$log_file"
+      fi
       if [ "$stop_worker" -eq 1 ]; then
         kill -TERM "$child_pid" 2>/dev/null || true
       fi
