@@ -259,8 +259,11 @@ class ProviderResponse:
     def iter_content(self, chunk_size=None, decode_unicode=False):
         size = chunk_size or 64 * 1024
         try:
+            # read1 returns the next available bytes instead of waiting to
+            # fill a large buffer; this keeps SSE token delivery responsive.
+            read_chunk = getattr(self._response, "read1", self._response.read)
             while True:
-                chunk = self._response.read(size)
+                chunk = read_chunk(size)
                 if not chunk:
                     break
                 if decode_unicode:
