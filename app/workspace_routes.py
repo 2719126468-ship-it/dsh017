@@ -226,12 +226,25 @@ def api_ws_auto_status():
 
 @workspace_bp.route("/api/workspace/apply_edit", methods=["POST"])
 def api_ws_apply_edit():
-    body = request.get_json(force=True, silent=True) or {}
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"code": -1, "message": "请求参数必须是 JSON 对象"}), 400
     file_id = body.get("file_id")
     old_str = body.get("old_str", "")
     new_str = body.get("new_str", "")
     base_version = body.get("base_version")
-    mode = (body.get("mode") or "ask").strip()
+    if (
+        isinstance(file_id, bool) or not isinstance(file_id, int) or file_id <= 0
+        or isinstance(base_version, bool) or not isinstance(base_version, int) or base_version < 1
+        or not isinstance(old_str, str) or not isinstance(new_str, str)
+    ):
+        return jsonify({"code": -1, "message": "文件 ID、版本或编辑内容格式无效"}), 400
+    raw_mode = body.get("mode", "ask")
+    if not isinstance(raw_mode, str):
+        return jsonify({"code": -1, "message": "mode 必须是 ask、suggest 或 auto"}), 400
+    mode = raw_mode
+    if mode not in ("ask", "suggest", "auto"):
+        return jsonify({"code": -1, "message": "mode 必须是 ask、suggest 或 auto"}), 400
     if file_id is None or base_version is None:
         return jsonify({"code": -1, "message": "缺少 file_id 或 base_version"})
 

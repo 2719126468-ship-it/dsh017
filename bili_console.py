@@ -56,6 +56,8 @@ app.register_blueprint(misc_bp)
 # Remote clients must authenticate; requests originating from this host are trusted.
 from app.auth import install_auth
 _auth_info = install_auth(app)
+from app.ui_theme import install_theme_support
+install_theme_support(app)
 
 
 if __name__ == "__main__":

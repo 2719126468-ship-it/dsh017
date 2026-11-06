@@ -12,7 +12,8 @@ from flask import Blueprint, request, jsonify, Response
 from app.bili_client import client, UA
 from app.metrics import _metric_inc, _playurl_cache_get, _playurl_cache_set
 from app.db import db_history_add
-from app.security import validate_remote_url
+from app.security import (validate_remote_url, safe_image_content_type,
+                          image_response_size_within_limit, iter_limited_response)
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ bili_bp = Blueprint('bili', __name__)
 _MAX_SEARCH_KEYWORD_CHARS = 100
 _MAX_SEARCH_PAGE = 100
 _MAX_AUDIO_BYTES = 128 * 1024 * 1024
+_MAX_PROXY_IMAGE_BYTES = 5 * 1024 * 1024
 _MEDIA_HOSTS = ("bilivideo.com", "bilivideo.cn", "hdslb.com", "bilibili.com")
 
 def _safe_unlink(path):
@@ -309,25 +311,44 @@ def api_audio():
 
 @bili_bp.route("/api/img")
 def api_img():
-    """代理 B 站封面图，带 Referer，避免 403"""
+    """代理有限大小的 B 站封面图，只允许安全的图片 MIME 类型。"""
     u = request.args.get("u", "")
     if not validate_remote_url(u, allowed_suffixes=("hdslb.com", "bilibili.com")):
         return "", 400
+    upstream = None
     try:
-        r = client.s.get(u, headers={"User-Agent": UA, "Referer": "https://www.bilibili.com/"},
-                         timeout=(5, 15), stream=True, allow_redirects=False)
-        def gen():
-            try:
-                for chunk in r.iter_content(chunk_size=32*1024):
-                    if chunk:
-                        yield chunk
-            finally:
-                r.close()
-        resp = Response(gen(), status=r.status_code,
-                        content_type=r.headers.get("Content-Type", "image/jpeg"))
+        upstream = client.s.get(
+            u,
+            headers={"User-Agent": UA, "Referer": "https://www.bilibili.com/"},
+            timeout=(5, 15),
+            stream=True,
+            allow_redirects=False,
+        )
+        if upstream.status_code != 200:
+            upstream.close()
+            return "", 502
+        content_type = safe_image_content_type(upstream)
+        if content_type is None:
+            upstream.close()
+            return "", 415
+        if not image_response_size_within_limit(upstream, _MAX_PROXY_IMAGE_BYTES):
+            upstream.close()
+            return "", 413
+
+        resp = Response(
+            iter_limited_response(upstream, _MAX_PROXY_IMAGE_BYTES),
+            status=200,
+            content_type=content_type,
+        )
         resp.headers["Cache-Control"] = "public, max-age=86400"
+        resp.call_on_close(upstream.close)
         return resp
     except Exception:
+        if upstream is not None:
+            try:
+                upstream.close()
+            except Exception:
+                pass
         return "", 500
 
 

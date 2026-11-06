@@ -16,6 +16,8 @@ from flask import Flask, jsonify
 app = Flask(__name__)
 from app.auth import install_auth
 _auth_info = install_auth(app)
+from app.ui_theme import install_theme_support
+install_theme_support(app)
 
 SERVICES = [
     {"name": "Bilibili", "sub": "wbi console", "port": 8092,

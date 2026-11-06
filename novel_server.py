@@ -5,6 +5,7 @@
                                                   novel.snssdk.com 免签名端点，章节字体 PUA 密文用 charset.json 解密
 """
 import os, re, json, time, urllib.parse, threading
+import logging
 
 def _lan_ip():
     try:
@@ -18,7 +19,8 @@ def _lan_ip():
         return "0.0.0.0"
 
 from flask import Flask, request, jsonify, Response, render_template_string
-from app.security import validate_remote_url
+from app.security import (validate_remote_url, safe_image_content_type,
+                          image_response_size_within_limit, iter_limited_response)
 
 try:
     from curl_cffi import requests as http_requests
@@ -27,14 +29,19 @@ except ImportError:
     import requests as http_requests
     USE_CFFI = False
 
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 from app.auth import install_auth
 _auth_info = install_auth(app)
+from app.ui_theme import install_theme_support
+install_theme_support(app)
 
 NOVEL_IMAGE_HOSTS = ("byteimg.com", "p6-tt.bytecdn.cn")
 NOVEL_MAX_QUERY_CHARS = 100
 NOVEL_MAX_PAGE = 100
 NOVEL_MAX_ID_CHARS = 128
+NOVEL_MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 # 明文 HTTP 社区代理默认关闭；仅在明确接受搜索词泄露风险后手动启用。
 LEGACY_HTTP_SEARCH_PROXIES_ENV = "DSH017_NOVEL_LEGACY_HTTP_PROXIES"
@@ -467,8 +474,9 @@ def api_search():
                 "abstract": b.get("abstract") or b.get("description") or "",
             })
         return jsonify({"code": 0, "books": out, "page": page})
-    except Exception as e:
-        return jsonify({"code": -500, "message": str(e)})
+    except Exception:
+        logger.exception("novel search request failed")
+        return jsonify({"code": -500, "message": "搜索暂时不可用，请稍后重试"})
 
 @app.route("/api/book")
 def api_book():
@@ -489,8 +497,9 @@ def api_book():
             "abstract": info.get("abstract") or "",
             "chapters": chapters,
         })
-    except Exception as e:
-        return jsonify({"code": -500, "message": str(e)})
+    except Exception:
+        logger.exception("novel book detail request failed")
+        return jsonify({"code": -500, "message": "书籍详情暂时不可用，请稍后重试"})
 
 @app.route("/api/content")
 def api_content():
@@ -502,16 +511,18 @@ def api_content():
     try:
         text = client.content(item_id)
         return jsonify({"code": 0, "item_id": item_id, "content": text})
-    except Exception as e:
-        return jsonify({"code": -500, "message": str(e)})
+    except Exception:
+        logger.exception("novel chapter content request failed")
+        return jsonify({"code": -500, "message": "章节内容暂时不可用，请稍后重试"})
 
 @app.route("/api/img")
 def api_img():
     u = request.args.get("u", "")
     if not validate_remote_url(u, allowed_suffixes=NOVEL_IMAGE_HOSTS):
         return "", 400
+    upstream = None
     try:
-        r = client.s.get(
+        upstream = client.s.get(
             u,
             headers={"User-Agent": UA, "Referer": "https://fanqienovel.com/"},
             timeout=(5, 15),
@@ -520,23 +531,32 @@ def api_img():
         )
         # Do not follow redirects: the target could resolve to a private address
         # even when the original CDN URL passed validation.
-        if 300 <= r.status_code < 400:
-            r.close()
+        if upstream.status_code != 200:
+            upstream.close()
             return "", 502
 
-        def gen():
-            try:
-                for chunk in r.iter_content(chunk_size=32 * 1024):
-                    if chunk:
-                        yield chunk
-            finally:
-                r.close()
+        content_type = safe_image_content_type(upstream)
+        if content_type is None:
+            upstream.close()
+            return "", 415
+        if not image_response_size_within_limit(upstream, NOVEL_MAX_IMAGE_BYTES):
+            upstream.close()
+            return "", 413
 
-        resp = Response(gen(), status=r.status_code,
-                        content_type=r.headers.get("Content-Type", "image/jpeg"))
+        resp = Response(
+            iter_limited_response(upstream, NOVEL_MAX_IMAGE_BYTES),
+            status=200,
+            content_type=content_type,
+        )
         resp.headers["Cache-Control"] = "public, max-age=86400"
+        resp.call_on_close(upstream.close)
         return resp
     except Exception:
+        if upstream is not None:
+            try:
+                upstream.close()
+            except Exception:
+                pass
         return "", 500
 
 @app.route("/health")

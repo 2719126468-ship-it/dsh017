@@ -150,6 +150,14 @@ class RemoteAuthTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_normal_token_cannot_bypass_auto_edit_with_unknown_mode(self):
+        response = self.remote_post(
+            "/api/workspace/apply_edit",
+            headers=self.bearer(self.auth_token),
+            json={"mode": "unexpected"},
+        )
+        self.assertEqual(response.status_code, 403)
+
     def test_normal_token_can_request_manual_confirmation_mode(self):
         response = self.remote_post(
             "/api/workspace/apply_edit",

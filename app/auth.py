@@ -163,7 +163,9 @@ def _requires_admin(path: str, method: str, json_body: dict | None) -> bool:
             body = request.get_json(force=True, silent=True)
         if not isinstance(body, dict):
             return True
-        return body.get("mode", "ask") == "auto"
+        # Unknown modes must fail closed: the route rejects them, and the auth gate
+        # treats every value other than explicit ask/suggest as admin-only.
+        return body.get("mode", "ask") not in ("ask", "suggest")
     return False
 
 
