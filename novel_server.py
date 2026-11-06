@@ -19,7 +19,8 @@ def _lan_ip():
         return "0.0.0.0"
 
 from flask import Flask, request, jsonify, Response, render_template_string
-from app.security import (validate_remote_url, safe_image_content_type,\n                          image_response_size_within_limit, iter_limited_response)
+from app.security import (validate_remote_url, safe_image_content_type,
+                          image_response_size_within_limit, iter_limited_response)
 
 try:
     from curl_cffi import requests as http_requests
