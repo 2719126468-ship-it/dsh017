@@ -10,6 +10,7 @@ from app.workspace_routes import _ws_scope_check, _ws_rule_lookup, _ws_auto_on_b
 from app.bili_routes import bili_bp
 from app.shorts_routes import shorts_bp
 from app.chat_routes import chat_bp
+from app.workspace_routes import workspace_bp
 from flask import Flask
 
 
@@ -63,6 +64,7 @@ class RouteTests(unittest.TestCase):
         self.app.register_blueprint(bili_bp)
         self.app.register_blueprint(shorts_bp)
         self.app.register_blueprint(chat_bp)
+        self.app.register_blueprint(workspace_bp)
         self.client = self.app.test_client()
 
     def test_search_exception_returns_500_json_without_logger_nameerror(self):
@@ -70,6 +72,14 @@ class RouteTests(unittest.TestCase):
             response = self.client.get("/api/search?q=test")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["code"], -500)
+
+    def test_workspace_rejects_unknown_or_non_string_edit_modes(self):
+        for mode in ("unexpected", " auto ", 123, None, []):
+            response = self.client.post(
+                "/api/workspace/apply_edit",
+                json={"file_id": 1, "base_version": 1, "mode": mode},
+            )
+            self.assertEqual(response.status_code, 400, repr(mode))
 
     def test_shorts_rejects_invalid_page(self):
         response = self.client.get("/api/shorts?q=test&page=0")
