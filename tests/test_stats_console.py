@@ -13,6 +13,13 @@ class StatisticsConsoleTests(unittest.TestCase):
     def setUp(self):
         self.client = hub_app.test_client()
 
+    def test_duplicate_hub_cards_are_counted_by_unique_service_port(self):
+        response = self.client.get("/")
+        body = response.get_data(as_text=True)
+
+        self.assertIn("var uniqueCount=Object.keys(uniquePorts).length", body)
+        self.assertIn("if(!countedPorts[s.port])", body)
+
     def test_stats_route_serves_a_dedicated_dashboard(self):
         response = self.client.get("/stats")
         body = response.get_data(as_text=True)
