@@ -32,7 +32,7 @@
 
 访问：`http://<局域网IP>:8092/`
 
-> 安全提示：主服务监听局域网网卡（`0.0.0.0`），请只在可信家庭/个人网络使用，不要直接暴露到公网或不可信公共 Wi-Fi。代理接口仅允许 HTTPS 的 B 站/CDN 域名，并拒绝解析到非公网 IP 的地址。
+> 安全提示：四个 Web 服务（`8080`、`8084`、`8091`、`8092`）均监听局域网网卡（`0.0.0.0`），远程访问全部要求 Token。仍建议只在可信家庭/个人网络使用，不要直接暴露到公网或不可信公共 Wi-Fi。代理接口仅允许 HTTPS 的 B 站/CDN 域名，并拒绝解析到非公网 IP 的地址。
 
 ## 快速开始
 
@@ -51,7 +51,7 @@ nohup python3 -u hub_server.py   > hub.log   2>&1 &
 
 ### 远程访问认证
 
-主机本机访问免认证：`127.0.0.1` / `::1`，以及服务启动时自动识别到的本机网卡地址均视为本机。其他设备访问主服务必须携带 Token。认证由 Flask 全局入口统一执行，覆盖首页、播放页、Shorts、聊天、收藏、工作区及全部 API；不会依赖客户端提交的 `X-Forwarded-For`。
+主机本机访问免认证：`127.0.0.1` / `::1`，以及各服务启动时自动识别到的本机网卡地址均视为本机。其他设备访问四个端口（`8080`、`8084`、`8091`、`8092`）都必须携带 Token。认证分别安装在每个 Flask 服务的全局入口，覆盖页面、API 和 `/health`；不会依赖客户端提交的 `X-Forwarded-For`。四个服务共用同一组 Token 文件。
 
 跨设备写入同时检查 `Origin` / `Sec-Fetch-Site`，拒绝跨站写入请求，降低浏览器 Basic 凭据被第三方网页滥用的风险。
 
@@ -60,7 +60,7 @@ nohup python3 -u hub_server.py   > hub.log   2>&1 &
 - `data/auth_token`：普通 Token，可远程读取和执行常规写入。
 - `data/admin_token`：管理员 Token，额外允许修改工作区权限规则、创建备份、修改/删除聊天预设，以及执行 `mode=auto` 的 AI 自动编辑。
 
-远程浏览器打开 `http://<主机局域网IP>:8092/` 时会出现 HTTP Basic 认证提示，用户名填写 `dsh017`，密码填写对应 Token。普通设备使用 `auth_token`；需要管理权限时才使用 `admin_token`。程序/API 客户端也可发送 `Authorization: Bearer <TOKEN>`。在服务主机上可用 `cat data/auth_token` 和 `cat data/admin_token` 查看默认 Token。主机本机无需输入任何 Token。删除对应 Token 文件并重启即可重新生成。
+远程浏览器打开任意服务地址（例如 `http://<主机局域网IP>:8092/`）时会出现 HTTP Basic 认证提示，用户名填写 `dsh017`，密码填写对应 Token。普通设备使用 `auth_token`；需要管理权限时才使用 `admin_token`。两个 Token 在四个服务端口通用；由于端口不同，浏览器可能会分别弹出认证提示。程序/API 客户端也可发送 `Authorization: Bearer <TOKEN>`。在服务主机上可用 `cat data/auth_token` 和 `cat data/admin_token` 查看默认 Token。主机本机无需输入任何 Token。删除对应 Token 文件并重启全部服务即可重新生成。
 
 若主机有多张网卡，自动识别未覆盖到用于本机访问的地址，可在启动前设置 `DSH017_AUTH_EXEMPT_IPS`，填写主机自身的精确 IP，多个地址用逗号分隔；不要填写整个局域网网段。也可以通过 `DSH017_AUTH_TOKEN` 和 `DSH017_ADMIN_TOKEN` 环境变量自定义 Token（至少 32 个字符）。更换 Token 后重启服务。不要把 Token 写入仓库或分享给其他人；HTTP Basic/Bearer 在普通 HTTP 网络中不加密，跨不可信网络访问应使用 HTTPS 或 VPN。
 
