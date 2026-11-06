@@ -141,10 +141,18 @@ def _db_init_workspace():
     with _DB_LOCK:
         c = _db_conn()
         c.executescript("""
+        CREATE TABLE IF NOT EXISTS workspace_projects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS workspace_files (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             parent_id INTEGER DEFAULT NULL,
+            workspace_id TEXT,
             content TEXT NOT NULL DEFAULT '',
             version INTEGER NOT NULL DEFAULT 1,
             deleted_at INTEGER DEFAULT NULL,
@@ -160,6 +168,23 @@ def _db_init_workspace():
         );
         CREATE INDEX IF NOT EXISTS idx_ws_ver_file ON workspace_file_versions(file_id, created_at DESC);
         """)
+        columns = {row["name"] for row in c.execute("PRAGMA table_info(workspace_files)").fetchall()}
+        if "workspace_id" not in columns:
+            c.execute("ALTER TABLE workspace_files ADD COLUMN workspace_id TEXT")
+        now = int(time.time())
+        c.execute(
+            "INSERT OR IGNORE INTO workspace_projects(id,name,description,created_at,updated_at) "
+            "VALUES(?,?,?,?,?)",
+            ("default", "我的工作区", "从早期版本迁移的文件", now, now),
+        )
+        c.execute(
+            "UPDATE workspace_files SET workspace_id='default' "
+            "WHERE workspace_id IS NULL OR workspace_id=''"
+        )
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ws_files_project "
+            "ON workspace_files(workspace_id, deleted_at, updated_at DESC)"
+        )
         c.commit(); c.close()
 
 def _snapshot_file(c, file_id, content, source, base_version):
