@@ -162,7 +162,7 @@ GitHub Actions 会在 push、PR 和手动触发时运行 Python 3.10–3.12 测�
 
 远程供应商必须使用 HTTPS，且 DNS 返回的所有地址都必须是公网地址；HTTP 仅允许 `localhost` / loopback 本地网关。模型探测与聊天请求均禁用 HTTP 重定向，避免已验证地址跳转到其他主机。供应商密钥不会通过配置列表回显；Android APK 使用 Android Keystore 加密保存密钥。
 
-Magpie 目前以 Gateway 方式接入：先在 Magpie 自己的客户端完成登录，再将 Gateway 地址和 Key 配置到 DSH。DSH 尚未实现代替 Magpie/Qoder 的浏览器 OAuth 登录或读取其登录 Cookie；不要把网站 Cookie 当成 Gateway Key 粘贴。
+Magpie 默认端口可通过下方的「检测本机 Magpie」一键发现；若使用自定义端口或另一台设备上的 Gateway，仍可手动添加兼容供应商。浏览器订阅登录由 Magpie 自己负责，DSH 不读取 Magpie/Qoder 的浏览器 Cookie，也不代替 Qoder 执行私有 OAuth 流程；不要把网站 Cookie 当成 Gateway Key 粘贴。
 
 ### Magpie Gateway 自动接入
 
