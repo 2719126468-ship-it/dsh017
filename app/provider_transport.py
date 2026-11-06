@@ -133,6 +133,44 @@ def resolve_provider_target(url: str) -> ProviderTarget:
     return ProviderTarget(scheme, hostname, port, str(address), parsed.path or "/")
 
 
+
+def validate_provider_url_syntax(url: str) -> bool:
+    """Check provider URL syntax without requiring DNS to be online.
+
+    Public-address classification is deliberately deferred until the exact
+    outbound request is made, so saved providers remain visible while offline.
+    """
+    if not isinstance(url, str) or not url or len(url) > 2048:
+        return False
+    if any(ord(char) < 32 or char.isspace() for char in url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        scheme = parsed.scheme.lower()
+        hostname = (parsed.hostname or "").rstrip(".").lower()
+        port = parsed.port
+        if (
+            scheme not in {"http", "https"}
+            or not hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or (port is not None and not 1 <= port <= 65535)
+        ):
+            return False
+        if scheme == "https":
+            hostname.encode("idna")
+            return True
+        if hostname == "localhost":
+            return True
+        try:
+            return ipaddress.ip_address(hostname).is_loopback
+        except ValueError:
+            return False
+    except (UnicodeError, ValueError):
+        return False
+
 def validate_provider_url(url: str) -> bool:
     """Boolean compatibility wrapper for provider configuration validation."""
     try:
