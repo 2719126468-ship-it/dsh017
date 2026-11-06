@@ -24,15 +24,22 @@ class ProviderUrlSecurityTests(unittest.TestCase):
             self.assertFalse(validate_provider_url("https://missing.example.test/v1"))
 
     def test_remote_http_is_rejected(self):
-        with patch("app.security.socket.getaddrinfo", return_value=[
-            (2, 1, 6, "", ("8.8.8.8", 80)),
-        ]):
-            self.assertFalse(validate_provider_url("http://api.example.test/v1"))
+        self.assertFalse(validate_provider_url("http://api.example.test/v1"))
 
     def test_http_loopback_gateways_are_allowed(self):
         self.assertTrue(validate_provider_url("http://127.0.0.1:3425/v1"))
-        self.assertTrue(validate_provider_url("http://localhost:11434/v1"))
         self.assertTrue(validate_provider_url("http://[::1]:1234/v1"))
+        with patch("app.security.socket.getaddrinfo", return_value=[
+            (2, 1, 6, "", ("127.0.0.1", 80)),
+            (10, 1, 6, "", ("::1", 80, 0, 0)),
+        ]):
+            self.assertTrue(validate_provider_url("http://localhost:11434/v1"))
+
+    def test_localhost_resolving_outside_loopback_is_rejected(self):
+        with patch("app.security.socket.getaddrinfo", return_value=[
+            (2, 1, 6, "", ("8.8.8.8", 80)),
+        ]):
+            self.assertFalse(validate_provider_url("http://localhost:11434/v1"))
 
     def test_credentials_query_fragment_and_non_http_schemes_are_rejected(self):
         self.assertFalse(validate_provider_url("https://user:pass@example.com/v1"))
