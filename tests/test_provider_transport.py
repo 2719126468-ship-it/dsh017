@@ -64,6 +64,39 @@ class ProviderTransportTests(unittest.TestCase):
         tls_socket.settimeout.assert_called_once_with(30)
         connection.close()
 
+    def test_stream_reader_prefers_read1_to_avoid_buffering_sse_chunks(self):
+        class ChunkResponse:
+            def __init__(self):
+                self.chunks = [b"data: one\\n\\n", b"data: two\\n\\n", b""]
+                self.read_calls = 0
+                self.read1_calls = 0
+                self.closed = False
+
+            def read(self, _size):
+                self.read_calls += 1
+                raise AssertionError("read() would wait to fill the requested buffer")
+
+            def read1(self, _size):
+                self.read1_calls += 1
+                return self.chunks.pop(0)
+
+            def close(self):
+                self.closed = True
+
+        response = ChunkResponse()
+        connection = Mock()
+        stream = __import__(
+            "app.provider_transport", fromlist=["ProviderResponse"]
+        ).ProviderResponse(connection, response)
+        self.assertEqual(
+            list(stream.iter_content(chunk_size=64 * 1024)),
+            [b"data: one\\n\\n", b"data: two\\n\\n"],
+        )
+        self.assertEqual(response.read_calls, 0)
+        self.assertEqual(response.read1_calls, 3)
+        self.assertTrue(response.closed)
+        connection.close.assert_called_once()
+
     def test_provider_request_sends_json_to_pinned_loopback_server(self):
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
