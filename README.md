@@ -48,6 +48,22 @@ nohup python3 -u novel_server.py > novel.log 2>&1 &
 nohup python3 -u hub_server.py   > hub.log   2>&1 &
 ```
 
+
+### 远程访问认证
+
+主机本机访问免认证：`127.0.0.1` / `::1`，以及服务启动时自动识别到的本机网卡地址均视为本机。其他设备访问主服务必须携带 Token。认证由 Flask 全局入口统一执行，覆盖首页、播放页、Shorts、聊天、收藏、工作区及全部 API；不会依赖客户端提交的 `X-Forwarded-For`。
+
+跨设备写入同时检查 `Origin` / `Sec-Fetch-Site`，拒绝跨站写入请求，降低浏览器 Basic 凭据被第三方网页滥用的风险。
+
+默认首次启动自动生成两枚独立随机 Token，保存在权限为 `600` 的文件中（若设置了对应环境变量，则使用环境变量而不创建该 Token 文件）：
+
+- `data/auth_token`：普通 Token，可远程读取和执行常规写入。
+- `data/admin_token`：管理员 Token，额外允许修改工作区权限规则、创建备份、修改/删除聊天预设，以及执行 `mode=auto` 的 AI 自动编辑。
+
+远程浏览器打开 `http://<主机局域网IP>:8092/` 时会出现 HTTP Basic 认证提示，用户名填写 `dsh017`，密码填写对应 Token。普通设备使用 `auth_token`；需要管理权限时才使用 `admin_token`。程序/API 客户端也可发送 `Authorization: Bearer <TOKEN>`。在服务主机上可用 `cat data/auth_token` 和 `cat data/admin_token` 查看默认 Token。主机本机无需输入任何 Token。删除对应 Token 文件并重启即可重新生成。
+
+若主机有多张网卡，自动识别未覆盖到用于本机访问的地址，可在启动前设置 `DSH017_AUTH_EXEMPT_IPS`，填写主机自身的精确 IP，多个地址用逗号分隔；不要填写整个局域网网段。也可以通过 `DSH017_AUTH_TOKEN` 和 `DSH017_ADMIN_TOKEN` 环境变量自定义 Token（至少 32 个字符）。更换 Token 后重启服务。不要把 Token 写入仓库或分享给其他人；HTTP Basic/Bearer 在普通 HTTP 网络中不加密，跨不可信网络访问应使用 HTTPS 或 VPN。
+
 ### 数据目录与测试
 
 默认运行数据保存在项目目录的 `data/`（数据库、备份和日志），预设保存在 `presets/`。可通过 `DSH017_DATA_DIR`、`DSH017_DB_PATH`、`DSH017_BACKUP_DIR`、`DSH017_PRESET_DIR` 自定义位置。无需以 root 身份运行。首次启动时，如果新数据目录为空且旧的 `/root/bili_data.db` 或 `/root/presets` 仍存在，会自动复制旧数据库和缺失的自定义预设；已有新数据不会被覆盖。
@@ -69,6 +85,7 @@ GitHub Actions 会在 push、PR 和手动触发时运行 Python 3.10–3.12 测�
 ├── bili_console.py        主入口（<100 行，只做 import + register + main）
 ├── run_bili.sh.example    守护脚本模板（内联 env + 日志轮转 + 崩溃拉起）
 ├── app/
+│   ├── auth.py            本机免认证 + 远程 Token / 权限分级
 │   ├── db.py              SQLite 层 + 备份 + 规则表
 │   ├── bili_client.py     BiliClient + WBI 签名 + curl_cffi 共享实例
 │   ├── metrics.py         指标计数器 + playurl 缓存

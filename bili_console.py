@@ -53,8 +53,18 @@ app.register_blueprint(play_bp)
 app.register_blueprint(misc_bp)
 
 
+# Remote clients must authenticate; requests originating from this host are trusted.
+from app.auth import install_auth
+_auth_info = install_auth(app)
+
+
 if __name__ == "__main__":
     print(f"🎬 Bili Console v6: http://{_lan_ip()}:8092/")
+    normal_source = "环境变量 DSH017_AUTH_TOKEN" if os.environ.get("DSH017_AUTH_TOKEN") else _auth_info["token_files"][0]
+    admin_source = "环境变量 DSH017_ADMIN_TOKEN" if os.environ.get("DSH017_ADMIN_TOKEN") else _auth_info["token_files"][1]
+    print("🔐 远程普通 Token 来源：" + normal_source)
+    print("🔐 远程管理员 Token 来源：" + admin_source)
+    print("   主机本机访问免认证；远程浏览器用户名为 dsh017，密码填写对应 Token。")
     if not ZHIPU_API_KEY:
         print("⚠️ 警告：未设置 ZHIPU_API_KEY 环境变量，聊天/总结/AI编辑将不可用")
     try:
