@@ -1,0 +1,89 @@
+#!/bin/bash
+# Stop only supervisors recorded in this project's own runtime directory.
+set -u
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DATA_DIR="${DSH017_DATA_DIR:-$SCRIPT_DIR/data}"
+RUN_DIR="$DATA_DIR/run"
+
+stop_one() {
+  local name="$1"
+  local expected_script="$2"
+  local lock_file="$RUN_DIR/$name-supervisor.lock"
+  local pid_file="$RUN_DIR/$name-supervisor.pid"
+  local pid=""
+  local command_line=""
+  local attempt=0
+
+  if [ ! -f "$lock_file" ]; then
+    echo "$name: 未找到 supervisor 锁文件，视为未运行。"
+    rm -f "$pid_file"
+    return 0
+  fi
+
+  exec 9>"$lock_file"
+  if flock -n 9; then
+    exec 9>&-
+    echo "$name: supervisor 未运行，清理过期 PID 文件。"
+    rm -f "$pid_file"
+    return 0
+  fi
+
+  if [ ! -f "$pid_file" ]; then
+    exec 9>&-
+    echo "$name: 锁正在使用，但 PID 文件不存在；为安全起见未发送信号。" >&2
+    return 1
+  fi
+
+  pid="$(cat "$pid_file" 2>/dev/null || true)"
+  case "$pid" in
+    ''|*[!0-9]*)
+      exec 9>&-
+      echo "$name: PID 文件内容无效，未发送信号。" >&2
+      return 1
+      ;;
+  esac
+
+  if ! kill -0 "$pid" 2>/dev/null; then
+    exec 9>&-
+    echo "$name: PID $pid 已不存在，清理过期 PID 文件。"
+    rm -f "$pid_file"
+    return 0
+  fi
+
+  command_line="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+  case "$command_line" in
+    *"$expected_script"*) ;;
+    *)
+      exec 9>&-
+      echo "$name: PID $pid 与 $expected_script 不匹配，拒绝向该进程发送信号。" >&2
+      return 1
+      ;;
+  esac
+
+  echo "$name: 向 supervisor PID $pid 发送 SIGTERM。"
+  kill -TERM "$pid" 2>/dev/null || true
+
+  while [ "$attempt" -lt 15 ]; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      break
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  if kill -0 "$pid" 2>/dev/null; then
+    exec 9>&-
+    echo "$name: supervisor 仍在退出；未强制 SIGKILL，请稍后检查日志。" >&2
+    return 1
+  fi
+
+  exec 9>&-
+  echo "$name: supervisor 已停止。"
+  return 0
+}
+
+status=0
+stop_one "bili" "run_bili.sh" || status=1
+stop_one "sidecars" "run_sidecars.sh" || status=1
+exit "$status"
