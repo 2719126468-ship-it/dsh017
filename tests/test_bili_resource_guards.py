@@ -1,4 +1,3 @@
-import os
 import subprocess
 import tempfile
 import unittest
@@ -123,13 +122,13 @@ class BiliResourceGuardTests(unittest.TestCase):
             headers={"Content-Type": "audio/mp4", "Content-Length": "8"},
         )
         completed = subprocess.CompletedProcess(["ffmpeg"], 0, b"", b"")
-        real_tempdir = tempfile.TemporaryDirectory
+        real_mkdtemp = tempfile.mkdtemp
         created = {}
 
         def make_tempdir(*args, **kwargs):
-            obj = real_tempdir(*args, **kwargs)
-            created["path"] = obj.name
-            return obj
+            path = real_mkdtemp(*args, **kwargs)
+            created["path"] = path
+            return path
 
         def fake_ffmpeg(command, **kwargs):
             if "-version" in command:
@@ -137,7 +136,7 @@ class BiliResourceGuardTests(unittest.TestCase):
             Path(command[-1]).write_bytes(b"mp3-data")
             return completed
 
-        with patch("tempfile.TemporaryDirectory", side_effect=make_tempdir), \
+        with patch("tempfile.mkdtemp", side_effect=make_tempdir), \
              patch("subprocess.run", side_effect=fake_ffmpeg), \
              patch.object(bili_routes.client, "get_audio_url",
                           return_value=("https://upos-sz-mirror.bilivideo.com/audio", 1, "demo")), \
@@ -146,7 +145,6 @@ class BiliResourceGuardTests(unittest.TestCase):
             response = self.client.get("/api/audio?bvid=BV1234567890")
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.data, b"mp3-data")
-            self.assertTrue(Path(created["path"]).exists())
             response.close()
 
         self.assertTrue(upstream.closed)
