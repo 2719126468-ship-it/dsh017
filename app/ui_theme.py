@@ -339,6 +339,17 @@ html.dsh-theme-changing #dsh017-theme-toggle {
   outline-offset: 2px;
 }
 
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
 /* Claude-inspired: warm paper, quiet navigation, editorial conversation. */
 html[data-dsh-theme="claude"] .sidebar {
   width: 264px;
