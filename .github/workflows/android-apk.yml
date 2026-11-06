@@ -24,9 +24,11 @@ jobs:
       matrix:
         include:
           - flavor: arm32
+            task: assembleArm32Debug
             python: "3.11"
             artifact: ARMv7-32bit
           - flavor: arm64
+            task: assembleArm64Debug
             python: "3.12"
             artifact: ARM64-64bit
 
@@ -57,7 +59,7 @@ jobs:
           gradle-version: "8.13"
 
       - name: Build APK
-        run: gradle -p android-app assemble${{ matrix.flavor == 'arm32' && 'Arm32' || 'Arm64' }}Debug --stacktrace
+        run: gradle -p android-app ${{ matrix.task }} --stacktrace
 
       - name: Stage APK
         run: |
