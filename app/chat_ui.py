@@ -1020,8 +1020,7 @@ html[data-theme="dark"] .canvas-pane{
     updateJumpLatest();
   }
 
-  // Safe, dependency-free Markdown rendering for completed assistant messages.
-  // Streaming stays as one text node; rich blocks are built once when the stream ends.
+  // Safe, dependency-free Markdown renderer. Build DOM nodes, never HTML from model text.
   function appendInlineMarkdown(parent, source) {
     var text = String(source || '');
     var tick = String.fromCharCode(96);
@@ -1046,12 +1045,14 @@ html[data-theme="dark"] .canvas-pane{
         node = document.createElement('em');
         node.textContent = token.slice(1, -1);
       } else {
-        var linkMatch = token.match(/^\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)$/);
-        if(linkMatch) {
+        var linkStart = token.indexOf('](');
+        var linkLabel = linkStart > 1 ? token.slice(1, linkStart) : '';
+        var linkHref = linkStart > 1 ? token.slice(linkStart + 2, -1) : '';
+        if(linkHref.indexOf('https://') === 0 || linkHref.indexOf('http://') === 0) {
           node = document.createElement('a');
           node.className = 'md-link';
-          node.textContent = linkMatch[1];
-          node.href = linkMatch[2];
+          node.textContent = linkLabel;
+          node.href = linkHref;
           node.target = '_blank';
           node.rel = 'noopener noreferrer';
         }
@@ -1065,15 +1066,22 @@ html[data-theme="dark"] .canvas-pane{
 
   function renderAssistantMarkdown(target, source) {
     target.textContent = '';
-    var lines = String(source || '').replace(/\\r/g, '').split('\\n');
+    var lines = String(source || '').replace(new RegExp(String.fromCharCode(13), 'g'), '')
+      .split(String.fromCharCode(10));
     var i = 0;
     var tick = String.fromCharCode(96);
     var fenceStart = new RegExp('^\\s*' + tick + tick + tick + '\\s*([a-zA-Z0-9_+.-]*)');
     var fenceEnd = new RegExp('^\\s*' + tick + tick + tick + '\\s*$');
+    var headingPattern = new RegExp('^\\s*(#{1,3})\\s+(.+)$');
+    var unorderedPattern = new RegExp('^\\s*[-*+]\\s+');
+    var orderedPattern = new RegExp('^\\s*\\d+\\.\\s+');
+    var quotePattern = new RegExp('^\\s*>');
+    var hrPattern = new RegExp('^\\s*([-*_]\\s*){3,}$');
+
     function isBlockStart(line) {
-      return fenceStart.test(line) || /^#{1,3}\\s/.test(line) ||
-        /^\\s*(?:[-*+]\\s+|\\d+\\.\\s+)/.test(line) ||
-        /^\\s*>/.test(line) || /^\\s*([-*_]\\s*){3,}$/.test(line);
+      return fenceStart.test(line) || headingPattern.test(line) ||
+        unorderedPattern.test(line) || orderedPattern.test(line) ||
+        quotePattern.test(line) || hrPattern.test(line);
     }
     while(i < lines.length) {
       var line = lines[i];
@@ -1095,14 +1103,14 @@ html[data-theme="dark"] .canvas-pane{
         codeWrap.appendChild(codeHead);
         var pre = document.createElement('pre');
         var code = document.createElement('code');
-        code.textContent = codeLines.join('\\n');
+        code.textContent = codeLines.join(String.fromCharCode(10));
         pre.appendChild(code);
         codeWrap.appendChild(pre);
         target.appendChild(codeWrap);
         continue;
       }
 
-      var heading = line.match(/^\\s*(#{1,3})\\s+(.+)$/);
+      var heading = line.match(headingPattern);
       if(heading) {
         var h = document.createElement('h' + heading[1].length);
         h.className = 'md-h md-h' + heading[1].length + ' md-rendered';
@@ -1112,7 +1120,7 @@ html[data-theme="dark"] .canvas-pane{
         continue;
       }
 
-      if(/^\\s*([-*_]\\s*){3,}$/.test(line)) {
+      if(hrPattern.test(line)) {
         var hr = document.createElement('hr');
         hr.className = 'md-hr';
         target.appendChild(hr);
@@ -1120,10 +1128,10 @@ html[data-theme="dark"] .canvas-pane{
         continue;
       }
 
-      if(/^\\s*>/.test(line)) {
+      if(quotePattern.test(line)) {
         var quoteLines = [];
-        while(i < lines.length && /^\\s*>/.test(lines[i])) {
-          quoteLines.push(lines[i++].replace(/^\\s*>\\s?/, ''));
+        while(i < lines.length && quotePattern.test(lines[i])) {
+          quoteLines.push(lines[i++].replace(new RegExp('^\\s*>\\s?'), ''));
         }
         var quote = document.createElement('blockquote');
         quote.className = 'md-quote md-rendered';
@@ -1132,12 +1140,12 @@ html[data-theme="dark"] .canvas-pane{
         continue;
       }
 
-      var unordered = /^\\s*[-*+]\\s+/.test(line);
-      var ordered = /^\\s*\\d+\\.\\s+/.test(line);
+      var unordered = unorderedPattern.test(line);
+      var ordered = orderedPattern.test(line);
       if(unordered || ordered) {
         var list = document.createElement(ordered ? 'ol' : 'ul');
         list.className = 'md-list md-rendered';
-        var matcher = ordered ? /^\\s*\\d+\\.\\s+/ : /^\\s*[-*+]\\s+/;
+        var matcher = ordered ? orderedPattern : unorderedPattern;
         while(i < lines.length && matcher.test(lines[i])) {
           var li = document.createElement('li');
           appendInlineMarkdown(li, lines[i++].replace(matcher, ''));
@@ -1154,7 +1162,7 @@ html[data-theme="dark"] .canvas-pane{
       if(!paragraphLines.length) paragraphLines.push(lines[i++]);
       var p = document.createElement('p');
       p.className = 'md-p md-rendered';
-      appendInlineMarkdown(p, paragraphLines.join('\\n'));
+      appendInlineMarkdown(p, paragraphLines.join(String.fromCharCode(10)));
       target.appendChild(p);
     }
   }
