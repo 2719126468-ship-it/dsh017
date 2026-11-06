@@ -69,7 +69,7 @@ class NovelClient:
         with self._charset_lock:
             if self._charset is not None:
                 return self._charset
-            local = "/root/novel_charset.json"
+            local = os.path.abspath(os.environ.get("DSH017_NOVEL_CHARSET_PATH", "/root/novel_charset.json"))
             candidates = [
                 local,
                 "https://raw.githubusercontent.com/ckenkuo/fanqie-cdp-downloader/main/charset.json",
