@@ -1739,6 +1739,17 @@ html[data-theme="dark"] .canvas-pane{
 
       var reader = resp.body.getReader();
       activeReader = reader;
+      if(stopRequested) {
+        if(typeof reader.cancel === 'function') {
+          try {
+            var earlyCancel = reader.cancel();
+            if(earlyCancel && typeof earlyCancel.catch === 'function') earlyCancel.catch(function(){});
+          } catch(earlyCancelError) {}
+        }
+        var stoppedBeforeRead = new Error('Generation stopped');
+        stoppedBeforeRead.name = 'AbortError';
+        throw stoppedBeforeRead;
+      }
       var decoder = new TextDecoder();
       var buffer = '';
 
