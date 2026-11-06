@@ -83,6 +83,13 @@ tasks.register("stageDshPython", Copy) {
     from(rootProject.file("app/src/main/python/android_entry.py"))
     into("$buildDir/generated/dshPython")
 }
+// Chaquopy creates variant-specific merge*PythonSources tasks. They consume
+// the staged directory, so declare the producer dependency explicitly.
+tasks.configureEach { task ->
+    if (task.name.endsWith("PythonSources")) {
+        task.dependsOn("stageDshPython")
+    }
+}
 tasks.named("preBuild").configure {
     dependsOn("stageDshPython")
 }
