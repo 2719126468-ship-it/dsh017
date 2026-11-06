@@ -519,11 +519,13 @@ input:focus,textarea:focus,select:focus{border-color:var(--p-accent)}
  </form>
  <div class="callout">
   <b>Magpie 本机网关</b><br>
-  先在 Magpie 中通过浏览器完成订阅登录，并保持 Magpie Gateway 运行。点击「检测本机 Magpie」即可自动读取 <code>127.0.0.1:3425</code> 的网关标识和模型目录，再保存供应商。检测仅访问本机固定端点，不读取账号 Cookie、Magpie 配置文件或其他凭据。<br>
+  先在 Magpie 中登录并启动 Gateway。要使用 Qoder，可在 Magpie 的 Plugins 中安装 <code>@magpie-community/opencode-qoder-auth</code>，然后对 <code>qoder</code> provider 完成它提供的浏览器授权；登录与刷新由 Magpie 插件负责。随后点击「检测本机 Magpie」，DSH 会从网关模型目录同步 Qoder 模型（通常以 <code>qoder/</code> 开头），再保存供应商即可在聊天和工作区选择。<br>
+  检测仅访问本机固定端点，不读取账号 Cookie、Magpie 配置文件或其他凭据；如果 Magpie 与 DSH 不在同一设备/网络命名空间，需要手动配置可访问的 Gateway 地址。<br>
   Android ARM64 终端版本可从 <a href="https://github.com/yetone/magpie-releases/releases/latest" target="_blank" rel="noopener noreferrer">Magpie 官方 Releases</a> 获取。<br>
   <a href="https://usemagpie.ai/docs/start" target="_blank" rel="noopener noreferrer">Magpie 官方说明 ↗</a> ·
-  <a href="https://docs.qoder.com/cli/authentication" target="_blank" rel="noopener noreferrer">Qoder CLI 登录文档 ↗</a> ·
-  <a href="https://docs.qoder.com/qoder/custom-models" target="_blank" rel="noopener noreferrer">Qoder BYOK 文档 ↗</a>
+  <a href="https://usemagpie.ai/docs/plugins" target="_blank" rel="noopener noreferrer">Magpie 插件与登录 ↗</a> ·
+  <a href="https://github.com/yetone/magpie/blob/main/AGENTS.md" target="_blank" rel="noopener noreferrer">Qoder 插件包 ↗</a> ·
+  <a href="https://docs.qoder.com/cli/authentication" target="_blank" rel="noopener noreferrer">Qoder CLI 登录文档 ↗</a>
  </div>
 </section>
 </main>
