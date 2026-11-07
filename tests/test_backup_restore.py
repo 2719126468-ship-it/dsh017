@@ -151,9 +151,10 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
             self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
             self.assertEqual(connection.execute("SELECT title FROM chat_conversations WHERE id='chat-1'").fetchone()[0], "backup chat")
 
-        for invalid_name in ("../outside.db", "subdir/app.db", "providers.json", "auth_token", "backup", ""):
+        invalid_names = ("../outside.db", "subdir/app.db", "providers.json", "auth_token", "backup", "")
+        for index, invalid_name in enumerate(invalid_names):
             with self.subTest(db_name=invalid_name):
-                target_data = self.root / ("invalid-db-name-" + str(len(invalid_name)) + "-" + str(list(("../outside.db", "subdir/app.db", "providers.json", "auth_token", "")).index(invalid_name)))
+                target_data = self.root / ("invalid-db-name-%d" % index)
                 target_presets = self.root / (target_data.name + "-presets")
                 self.run_tool(
                     "restore", "--archive", archive_path, "--data-dir",
