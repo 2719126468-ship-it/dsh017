@@ -140,6 +140,12 @@ class WorkspaceProjectApiTests(unittest.TestCase):
         })
         self.assertEqual(oversized_edit.status_code, 400)
 
+        oversized_old_edit = self.client.post("/api/workspace/apply_edit", json={
+            "file_id": file_id, "base_version": 1,
+            "old_str": "x" * 1_000_001, "new_str": "", "mode": "auto",
+        })
+        self.assertEqual(oversized_old_edit.status_code, 400)
+
     def test_default_workspace_cannot_be_deleted(self):
         response = self.client.delete("/api/workspace/projects/default")
         self.assertEqual(response.status_code, 400)
