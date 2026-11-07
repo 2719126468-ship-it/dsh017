@@ -202,3 +202,13 @@ Magpie 的登录与模型路由见 [官方入门文档](https://usemagpie.ai/doc
 
 这套系统从「WBI 签名卡死」啃到「AI 直接改文件 + 5 层权限闸门」，
 每一步都带自动回滚，每一步都验证过。骨架很稳，剩下的是收尾和打磨。
+
+### Android 旧版数据迁移（SAF）
+
+新安装的 Android Release 版本支持通过系统文件选择器导入/导出备份。对于已安装的 v0.1.2 Debug APK（旧版本早于 SAF 导出功能，且不能假定可用新签名 APK 原地更新），提供电脑端 ADB `run-as` 导出工具：
+
+```bash
+python3 scripts/export_legacy_android_backup.py --backup-dir "$HOME/DSH017-migration"
+```
+
+详细步骤、限制和设备验收清单见 [Android 数据迁移指南](docs/ANDROID_DATA_MIGRATION.md)。旧应用必须保留到新 Release 导入并核验完成；API Key 和 Android Keystore 密钥不迁移，需要重新配置。
