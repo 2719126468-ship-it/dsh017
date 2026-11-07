@@ -136,10 +136,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          : "$\{DSH017_ANDROID_KEYSTORE_BASE64:?Missing DSH017_ANDROID_KEYSTORE_BASE64 repository secret}"
-          : "$\{DSH017_ANDROID_STORE_PASSWORD:?Missing DSH017_ANDROID_STORE_PASSWORD repository secret}"
-          : "$\{DSH017_ANDROID_KEY_ALIAS:?Missing DSH017_ANDROID_KEY_ALIAS repository secret}"
-          : "$\{DSH017_ANDROID_KEY_PASSWORD:?Missing DSH017_ANDROID_KEY_PASSWORD repository secret}"
+          : "${DSH017_ANDROID_KEYSTORE_BASE64:?Missing DSH017_ANDROID_KEYSTORE_BASE64 repository secret}"
+          : "${DSH017_ANDROID_STORE_PASSWORD:?Missing DSH017_ANDROID_STORE_PASSWORD repository secret}"
+          : "${DSH017_ANDROID_KEY_ALIAS:?Missing DSH017_ANDROID_KEY_ALIAS repository secret}"
+          : "${DSH017_ANDROID_KEY_PASSWORD:?Missing DSH017_ANDROID_KEY_PASSWORD repository secret}"
           KEYSTORE_PATH="$RUNNER_TEMP/dsh017-release-signing.jks"
           printf '%s' "$DSH017_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
           test -s "$KEYSTORE_PATH"
@@ -166,8 +166,8 @@ jobs:
           OUTPUT="dist/DSH017-${{ matrix.artifact }}.apk"
           test -s "$APK"
           cp "$APK" "$OUTPUT"
-          apksigner verify --verbose "$OUTPUT"
-          CERT_SHA256="$(apksigner verify --print-certs "$OUTPUT" | awk -F ': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}')"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUTPUT"
+          CERT_SHA256="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$OUTPUT" | awk -F ': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}')"
           test -n "$CERT_SHA256"
           printf '%s\n' "$CERT_SHA256" > "dist/DSH017-${{ matrix.artifact }}.cert-sha256"
           sha256sum "$OUTPUT"
@@ -210,8 +210,8 @@ jobs:
           test "$ARM32_CERT" = "$ARM64_CERT"
           printf '%s\n' "$ARM32_CERT" > dist/SIGNING_CERT_SHA256.txt
           (cd dist && sha256sum DSH017-ARMv7-32bit.apk DSH017-ARM64-64bit.apk > SHA256SUMS.txt)
-          apksigner verify --verbose "$ARM32"
-          apksigner verify --verbose "$ARM64"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ARM32"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ARM64"
           ls -lh dist
           cat dist/SHA256SUMS.txt
           cat dist/SIGNING_CERT_SHA256.txt
