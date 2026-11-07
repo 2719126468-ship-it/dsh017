@@ -116,6 +116,26 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
         self.assertFalse((restored_data / "admin_token").exists())
         self.assertFalse((restored_data / "database.sqlite3").exists())
 
+    def test_backup_handles_database_paths_with_uri_reserved_characters(self):
+        source = self.source_data / "database # ? data.sqlite3"
+        source.write_bytes((self.source_data / "bili_data.db").read_bytes())
+        result = self.run_tool(
+            "backup", "--data-dir", self.source_data, "--db-path",
+            source, "--preset-dir", self.source_presets, "--backup-dir", self.backups,
+        )
+        archive_path = Path(result.stdout.strip())
+        restored_data = self.root / "special-path-restored-data"
+        restored_presets = self.root / "special-path-restored-presets"
+        self.run_tool(
+            "restore", "--archive", archive_path, "--data-dir",
+            restored_data, "--preset-dir", restored_presets,
+        )
+        with sqlite3.connect(restored_data / "bili_data.db") as connection:
+            self.assertEqual(
+                connection.execute("SELECT title FROM chat_conversations WHERE id='chat-1'").fetchone()[0],
+                "backup chat",
+            )
+
     def test_corrupt_archive_is_rejected_without_creating_destination(self):
         archive_path = self.create_backup()
         corrupt = self.root / "corrupt.tar.gz"
