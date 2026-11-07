@@ -3,7 +3,7 @@
 > **文档状态：** 战略基线 / 执行规划  
 > **规划基准日：** 2026-11-07  
 > **规划周期：** 2026 Q4—2027 Q4  
-> **当前仓库基线：** `main`，审查时可见最新提交 `ae8467779ab9b688f2d45cfedec2fa430c1c3ece`  
+> **当前仓库基线：** `main`，2026-11-07 审查时最新提交 `f1a06bfdc63f3476a281eeb74a3b9d90be2bd04a`  
 > **产品定位：** Personal AI Operating Environment（个人 AI 工作与生活中枢）
 
 本文件是 DSH-017 的长期产品战略、架构方向和版本规划依据。它不意味着文中所有目标能力都已实现。凡涉及现状的描述均以当前仓库代码、README、Android README、测试文件和提交记录为依据；未完成验收的能力会明确标为“待验证”。
@@ -44,6 +44,39 @@ DSH-017 是一个以个人为中心、以 AI 为智能核心、以 Workspace 为
 ### 明确不做什么
 
 近期不训练基础模型、不做企业级多租户、不做无边界自主 Agent、不急于建立插件市场、不为微服务而拆分、不以媒体功能数量作为主要增长指标，也不为了支持大量供应商而牺牲兼容性与稳定性。
+
+---
+
+
+## 0.1 当前执行状态（2026-11-07）
+
+本节记录战略文件建立后、P0 Issue 登记时可从 GitHub 直接核实的状态。它是带时间戳的审查快照，不会自动代表后续日期的状态。
+
+### 当前主分支与自动化证据
+
+- **main HEAD：** [`f1a06bfd`](https://github.com/2719126468-ship-it/dsh017/commit/f1a06bfdc63f3476a281eeb74a3b9d90be2bd04a)（`docs: link master strategy from README`）。
+- **CI：** [main push run #42311377222](https://github.com/2719126468-ship-it/dsh017/actions/runs/42311377222) 成功；Python 3.10、3.11、3.12 三个矩阵 Job 全部成功，包含依赖安装、Python 编译、单元 / 路由测试、内联 JavaScript 检查和 Shell 语法检查。
+- **Android：** [main push run #42311377201](https://github.com/2719126468-ship-it/dsh017/actions/runs/42311377201) 成功；`Build ARMv7-32bit` 与 `Build ARM64-64bit` 两个 Job 均成功，均完成 APK stage 和 workflow artifact 上传。该次 main push 的 `Publish GitHub Release` Job 按工作流条件跳过，这是预期行为；正式 Release 只在推送 `v*` tag 时创建。
+- **当前 main workflow artifacts：** [Android run artifacts](https://github.com/2719126468-ship-it/dsh017/actions/runs/42311377201)。ARMv7 artifact SHA256：`77e78bfab4d09a425f7aba00edad1c8eee522569b907bc0c6afdce17b52b4164`；ARM64 artifact SHA256：`576a80ee0cb81126c5047c01eb343f96d7450d9ecbbc12a2918646e7d4f329d1`。Actions artifact 有保留期限，不能代替长期 Release 资产。
+- **历史 PR 检查：** PR #23 的最终 PR 检查成功并已合并；早期中间提交曾因测试 Mock 仍使用旧 `client.s.post` 接口、以及模拟 SSE 响应缺少 `status` 属性而失败。后续提交同步更新测试并补齐模拟对象，最终 PR 检查和 main push 检查通过。不要把这些早期 PR 失败误报为当前 main 失败。
+- **Issues / PR：** 本轮登记前没有开放 Issue 或 PR；近期 PR #20–#23 均已合并。现已创建以下七个 P0 跟踪项，见第 7 节。
+
+### Release 基线差异
+
+当前公开 [v0.1.2 Release](https://github.com/2719126468-ship-it/dsh017/releases/tag/v0.1.2) 指向提交 `5aa8ea52225de8b341436ba9aa51cd51549d0ce7`，并包含 ARMv7 APK、ARM64 APK 与 `SHA256SUMS.txt`。但 main 后续又合入 Magpie 自动发现、Provider DNS 固定传输 / SSE 修复及 Master Plan 文档；这些后续提交不在现有 v0.1.2 Release 的目标提交中。
+
+当前 Gradle 配置仍为 `versionName 0.1.2`、`versionCode 3`。因此不能移动或覆盖现有 v0.1.2 tag。建议在 P0 实机与集成验收通过后发布下一个 patch 版本（建议 v0.1.3），递增 versionCode，并为该 Release 重新构建双 ABI APK。
+
+### 尚未由仓库自动化证明的事项
+
+以下项目即使有对应代码或单元测试，也仍需真实环境证据：
+- Mate 20 Pro / Android 10 的安装、启动、WebView、网络和 Workspace 实机验收。
+- 使用真实 API 凭据的 Provider 完整调用、模型发现与流式输出。
+- Magpie Gateway 与 Qoder 插件实际授权后的真实请求。
+- 独立数据目录中的 SQLite 备份与恢复演练。
+- 四服务认证、Keystore、日志脱敏和网络出口策略的集中安全回归。
+
+以上均已登记为开放 P0 Issues，不把构建成功当作实机验收完成。
 
 ---
 
@@ -382,20 +415,23 @@ Workspace 是项目数据和修改的权威载体。功能优先级：
 
 ## 7. GitHub Issues 任务树
 
-以下是建议创建的 Epic / Issue 结构，**是待建立的 Backlog，不代表这些 GitHub Issues 已经创建**。建立 Issue 时应先查重，避免与现有 Issue、提交或已完成工作重复。
+以下是项目执行 Backlog。v0.1.2 稳定化 P0 已转为实际 GitHub Issues #24–#30；v0.2.0 及后续 P1/P2 项仍是待排期建议。Issue 状态以 GitHub 当前状态为准。
 
 ### EPIC P0 — v0.1.2 稳定化
 
-- [ ] **P0-01 Release Readiness Audit**：核对 main HEAD、标签、版本号、Release 资产和变更记录。
-- [ ] **P0-02 CI Evidence**：确认 Python 3.10–3.12 的最新 CI 全绿；失败必须有日志和修复提交。
-- [ ] **P0-03 Android ARM Build**：验证 ARMv7 / ARM64 两个 APK 的构建、文件大小、SHA256 和安装启动。
-- [ ] **P0-04 Provider E2E**：验证新增、编辑、删除、密钥保存、模型发现、聊天、SSE、错误和离线场景。
-- [ ] **P0-05 Magpie / Qoder E2E**：验证真实 Gateway 发现、模型同步、授权和一次真实请求。
-- [ ] **P0-06 Workspace Regression**：覆盖项目、文件、版本、恢复、审批、拒绝规则和自动修改熔断。
-- [ ] **P0-07 Backup Restore Drill**：在隔离目录完成数据库与用户数据备份、恢复和校验。
-- [ ] **P0-08 Security Regression**：验证认证、管理员权限、SSRF、DNS 固定、重定向、凭据脱敏和网络边界。
-- [ ] **P0-09 Mobile Smoke Test**：在代表性 ARM32 / ARM64 Android 设备上验证启动、导航、输入、文件和长回复。
-- [ ] **P0-10 Docs & Release Notes**：校对 README、Android README、已知限制、安装和升级说明。
+<text>**已由自动化证据验证：**</text>
+- [x] **P0-02 CI Evidence**：当前 main HEAD 的 Python 3.10 / 3.11 / 3.12 CI 通过；详见 [run #42311377222](https://github.com/2719126468-ship-it/dsh017/actions/runs/42311377222)。
+- [x] **P0-03 Android ARM Build**：当前 main HEAD 的 ARMv7 / ARM64 Build Job 均通过并上传 workflow artifacts；详见 [run #42311377201](https://github.com/2719126468-ship-it/dsh017/actions/runs/42311377201)。这不代表实机运行已通过。
+- [x] **P0-10 Strategy / README link**：Master Plan 已提交至 `docs/MASTER_PLAN.md`，README 已添加入口。
+
+**仍需完成的 P0：**
+- [ ] **P0-01 Release alignment**：[#24](https://github.com/2719126468-ship-it/dsh017/issues/24) — 处理现有 v0.1.2 Release 与最新 main 的提交差异；验收后发布新的 patch 版本。
+- [ ] **P0-04 Android device smoke test**：[#25](https://github.com/2719126468-ship-it/dsh017/issues/25) — 在真实 Android 设备上验证安装、服务启动、Chat、Workspace、主题和文件访问。
+- [ ] **P0-05 Provider E2E**：[#26](https://github.com/2719126468-ship-it/dsh017/issues/26) — 使用真实 Provider 验证密钥、模型发现、聊天、SSE、错误和离线场景。
+- [ ] **P0-06 Magpie / Qoder E2E**：[#27](https://github.com/2719126468-ship-it/dsh017/issues/27) — 验证真实 Gateway 检测、授权、模型同步与真实请求。
+- [ ] **P0-07 Workspace Regression**：[#30](https://github.com/2719126468-ship-it/dsh017/issues/30) — 验证项目、文件、版本、冲突、审批、拒绝规则和自动修改熔断。
+- [ ] **P0-08 Backup Restore Drill**：[#28](https://github.com/2719126468-ship-it/dsh017/issues/28) — 在隔离目录完成数据库与用户数据备份、恢复和校验。
+- [ ] **P0-09 Security Regression**：[#29](https://github.com/2719126468-ship-it/dsh017/issues/29) — 验证认证、管理员权限、SSRF、DNS 固定、重定向、凭据脱敏和网络边界。
 
 ### EPIC P1 — v0.2.0 Workspace 产品化
 
