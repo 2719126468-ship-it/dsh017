@@ -84,7 +84,7 @@ DSH-017 是一个以个人为中心、以 AI 为智能核心、以 Workspace 为
 
 ## 0.2 执行状态增补（2026-11-07，P0 修复合并后）
 
-本节是对 0.1 初始快照的后续增补。此次合并验收所覆盖的功能代码基线为 `285025b7481d6e9ab7607de690ed858ea8576022`；`07fa91c` 仅是最初快照中的历史 HEAD，不再代表当前功能基线。
+本节是对 0.1 初始快照的后续增补。此处的首批功能代码基线为 `285025b7481d6e9ab7607de690ed858ea8576022`；`07fa91c` 仅是最初快照中的历史 HEAD，不再代表当前功能基线。2026-11-07 后续合并与最新主分支状态见 0.3 节。
 
 ### 已合入主分支的稳定性与安全修复
 
@@ -121,13 +121,44 @@ PR #36 新增 `scripts/data_backup.py` 与 `docs/BACKUP_RESTORE.md`。备份使�
 
 - 公开最新 Release 仍是 `v0.1.2`；没有创建或覆盖 `v0.1.3` tag。Gradle 版本仍需按发布计划从 `versionName 0.1.2` / `versionCode 3` 递增。
 - #24–#31 八个 P0 issue 仍按各自验收标准跟踪；PR 合并不自动关闭依赖实机 / 真实凭据的 issue。
-- #28：隔离备份 / 恢复工具和合成数据测试已合入；真实运行目录的人工恢复演练、服务停启与关键记录核验仍未完成。
+- #28：隔离备份 / 恢复工具已合入，并支持默认及自定义 SQLite 文件名；真实运行目录的人工恢复演练、服务停启与关键记录核验仍未完成。
 - #31：持久化 Release 签名代码已合入；四项 repository Actions secrets 是否配置、正式双 ABI Release 是否用同证书、升级安装与旧 Debug 包数据迁移仍待实测。
 - #25：Mate 20 Pro / Android 10 实机安装、WebView、Chat、Workspace、主题、统计和数据升级测试仍待完成。
 - #26 / #27：真实 OpenAI-compatible Provider 与 Magpie / Qoder 账号授权后的集成测试仍待完成。
-- #29 / #30：仍需完成安全边界集中回归与 Workspace 完整权限 / 移动端验证。
+- #29：Provider 错误响应脱敏与 IPv6 DNS 安全回归已合入；认证、WebView bridge、代理与设备边界的整体验收仍未完成。
+- #30：Workspace AI 编辑规则、大小限制、并发冲突、文件路径边界及移动键盘视口自动化回归已合入；Mate 20 Pro WebView 触摸 / 键盘实测仍待完成。
 
 不得因为自动化通过而提前关闭 #24–#31，也不得在签名和数据迁移验收前创建下一版公开 Release。
+
+---
+
+## 0.3 执行状态增补（2026-11-07，后续 P0 合并）
+
+最新主分支提交：`9503d042ab0c2d7d81e86257645b617125569299`。
+
+### 新增合入的 P0 修复
+
+| PR | 合并提交 | 变更 | PR 验证 |
+|---|---|---|---|
+| [#43](https://github.com/2719126468-ship-it/dsh017/pull/43) | `e937935` | Provider `/models`、`/test` 与 Magpie discovery 错误响应脱敏；IPv6 ULA、link-local、IPv4-mapped loopback 与混合 DNS 答案回归覆盖；全局 IPv6 仍做地址 pinning | [CI #42365238783](https://github.com/2719126468-ship-it/dsh017/actions/runs/42365238783) 三版本通过；[Android #42365238854](https://github.com/2719126468-ship-it/dsh017/actions/runs/42365238854) 双 ABI 通过 |
+| [#42](https://github.com/2719126468-ship-it/dsh017/pull/42) | `c29c025` | `confirm_edit` 同时限制 old/new 1 MB；Workspace 默认 ask、deny precedence、手动确认不能绕过 deny、自动断路器、版本冲突、文件名 / parent 边界回归；移动端 visualViewport 键盘高度适配 | [CI #42365437464](https://github.com/2719126468-ship-it/dsh017/actions/runs/42365437464) Python 3.10 / 3.11 / 3.12 通过；[Android #42365437468](https://github.com/2719126468-ship-it/dsh017/actions/runs/42365437468) 双 ABI 通过 |
+| [#40](https://github.com/2719126468-ship-it/dsh017/pull/40) | `9503d04` | 备份恢复支持 `--db-name`，适配自定义 `DSH017_DB_PATH` basename；拒绝路径穿越、目录分隔符、token / provider 保留名及 `backup` 冲突名；修复恢复文档环境变量初始化顺序 | [CI #42365554965](https://github.com/2719126468-ship-it/dsh017/actions/runs/42365554965) 三版本通过；[Android #42365554967](https://github.com/2719126468-ship-it/dsh017/actions/runs/42365554967) 双 ABI 通过 |
+
+PR #41 是 Workspace 保护逻辑的较早重复草稿，已在 PR #42 合并后关闭；#42 是覆盖权限 / 并发 / 移动端的统一版本。PR #38 是基于旧主线的安全草稿，未合并；当前主线版本为 #43。
+
+### 最新主分支验证
+
+上述 PR 的 CI 和 Android 双 ABI 检查均在合并前通过。`main` 的合并提交 `9503d04` 又触发独立的 push CI 与 Android APK 构建；这两项主分支验证以对应 commit 的最终 Actions run 结果为准，不得用 PR 检查替代。PR 构建产物均为 Debug CI APK；Release signing job 在 PR / main push 事件中跳过是预期行为。
+
+### 仍然阻断 v0.1.3 发布的实际验收
+
+- 配置四项受保护的 Android Release signing repository secrets，并使用专用版本 tag 运行正式双 ABI Release；检查两份 Release APK 的 signer 证书指纹一致，并验证安装、覆盖升级及数据保留。
+- 在 Huawei Mate 20 Pro / Android 10 实机验证登录 / Token、WebView、Chat、Workspace 编辑、软键盘 viewport、主题、统计及启动恢复。
+- 对实际服务路径执行隔离备份 / 恢复演练：停服、备份、恢复到新目录，使用匹配的 `DSH017_DB_PATH` / data / preset 路径启动恢复副本，逐项核验聊天和 Workspace 记录后才可考虑退役原数据。
+- 使用真实用户自行配置的 Provider / Magpie / Qoder 凭据验证模型列表、连通测试、流式聊天和授权流程；凭据不进入仓库、Issue 或聊天记录。
+- 公开 Release 仍是 `v0.1.2`；未更改其 tag / assets，也未创建 `v0.1.3`。
+
+自动化验证已明显扩大，但上述签名、恢复、供应商和手机验收未完成前，不把 P0 标记为已全部关闭，不创建正式新版本。
 
 ---
 
