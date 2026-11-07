@@ -336,6 +336,25 @@ _MAGPIE_APP_KEY = "magpie-dsh017"
 _MAGPIE_MAX_JSON_BYTES = 1024 * 1024
 
 
+def _safe_upstream_error(error, *secret_values, limit=300):
+    """Bound upstream errors and prevent credentials being reflected to clients."""
+    message = str(error)
+    for secret in secret_values:
+        if isinstance(secret, str) and len(secret) >= 4:
+            message = message.replace(secret, "[REDACTED]")
+    # Upstream services occasionally echo Authorization headers in error bodies.
+    while True:
+        start = message.lower().find("bearer ")
+        if start < 0:
+            break
+        value_start = start + 7
+        value_end = value_start
+        while value_end < len(message) and not message[value_end].isspace():
+            value_end += 1
+        message = message[:value_start] + "[REDACTED]" + message[value_end:]
+    message = "".join(ch for ch in message if ord(ch) >= 32 or ch == "\t")
+    return message[:limit]
+
 def _magpie_get_json(path, include_app_key=False):
     """Read one fixed local Magpie endpoint without proxies or redirects."""
     if path not in {"/api/hello", "/v1/models"}:
@@ -698,7 +717,7 @@ def api_detect_magpie():
     except Exception as error:
         return jsonify({
             "code": -1,
-            "message": str(error)[:300],
+            "message": _safe_upstream_error(error, _MAGPIE_APP_KEY),
         }), 502
 
 
@@ -728,7 +747,10 @@ def api_provider_models(provider_id):
     except KeyError as error:
         return jsonify({"code": -1, "message": str(error)}), 404
     except Exception as error:
-        return jsonify({"code": -1, "message": str(error)[:300]}), 502
+        return jsonify({
+            "code": -1,
+            "message": _safe_upstream_error(error, get_provider_secret(provider_id)),
+        }), 502
 
 
 @provider_bp.route("/api/providers/<provider_id>/test", methods=["POST"])
@@ -742,4 +764,7 @@ def api_provider_test(provider_id):
     except KeyError as error:
         return jsonify({"code": -1, "message": str(error)}), 404
     except Exception as error:
-        return jsonify({"code": -1, "message": str(error)[:300]}), 502
+        return jsonify({
+            "code": -1,
+            "message": _safe_upstream_error(error, get_provider_secret(provider_id)),
+        }), 502
