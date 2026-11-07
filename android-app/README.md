@@ -46,4 +46,8 @@ python3.13 --version
 gradle -p android-app assembleArm64Debug
 ```
 
-The GitHub Actions workflow builds both variants and publishes separate installable APK artifacts for 30 days. These are debug-signed sideload builds, not Play Store release builds.
+GitHub Actions builds both ABI variants on pushes to `main` / `feature/**` and on pull requests targeting `main`. Each run uploads separate installable APK artifacts with a 30-day retention period.
+
+Pushing a version tag matching `v*` also runs the release job after both builds succeed. The job attaches the ARMv7 APK, ARM64 APK, and `SHA256SUMS.txt` to a versioned GitHub Release. Verify the checksum for the downloaded APK before installing it.
+
+The CI APKs are debug-signed sideload builds, not Play Store release builds. A successful build proves packaging only; it does not replace installation and smoke testing on a real ARM32 / ARM64 device.
