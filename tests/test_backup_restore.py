@@ -100,7 +100,7 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
             "restore", "--archive", archive_path, "--data-dir",
             restored_data, "--preset-dir", restored_presets,
         )
-        with sqlite3.connect(restored_data / "database.sqlite3") as connection:
+        with sqlite3.connect(restored_data / "bili_data.db") as connection:
             self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
             self.assertEqual(connection.execute("SELECT content FROM workspace_files WHERE id=7").fetchone()[0], "keep this workspace data")
             self.assertEqual(connection.execute("SELECT title FROM chat_conversations WHERE id='chat-1'").fetchone()[0], "backup chat")
@@ -114,6 +114,7 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
         self.assertFalse((restored_data / "provider_secrets.json").exists())
         self.assertFalse((restored_data / "auth_token").exists())
         self.assertFalse((restored_data / "admin_token").exists())
+        self.assertFalse((restored_data / "database.sqlite3").exists())
 
     def test_corrupt_archive_is_rejected_without_creating_destination(self):
         archive_path = self.create_backup()
