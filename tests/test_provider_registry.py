@@ -1,11 +1,13 @@
 import os
 import tempfile
 import unittest
+from flask import Flask
 from unittest.mock import Mock, patch
 
 os.environ.setdefault("DSH017_DATA_DIR", tempfile.mkdtemp(prefix="dsh017-provider-tests-"))
 
 import app.providers as providers
+from app.providers import provider_bp
 
 
 class ProviderRegistryTests(unittest.TestCase):
@@ -96,6 +98,43 @@ class ProviderRegistryTests(unittest.TestCase):
                         "enabled": invalid,
                     })
 
+    def test_upstream_errors_never_reflect_provider_or_bearer_secrets(self):
+        secret = "provider-super-secret-value"
+        providers.add_provider({
+            "id": "redaction-provider",
+            "name": "Redaction Provider",
+            "base_url": "https://api.example.test/v1",
+            "models": ["sample-chat"],
+            "api_key": secret,
+        })
+        app = Flask(__name__)
+        app.register_blueprint(provider_bp)
+        client = app.test_client()
+        error = RuntimeError(
+            "HTTP 401: Authorization: Bearer " + secret +
+            "; api_key=" + secret + "; provider rejected the request"
+        )
+        with patch.object(providers, "fetch_provider_models", side_effect=error):
+            response = client.post("/api/providers/redaction-provider/models")
+            self.assertEqual(response.status_code, 502)
+            self.assertNotIn(secret, response.get_data(as_text=True))
+            self.assertIn("[REDACTED]", response.get_json()["message"])
+            response = client.post("/api/providers/redaction-provider/test")
+            self.assertEqual(response.status_code, 502)
+            self.assertNotIn(secret, response.get_data(as_text=True))
+
+    def test_magpie_errors_redact_bearer_credentials(self):
+        app = Flask(__name__)
+        app.register_blueprint(provider_bp)
+        client = app.test_client()
+        with patch.object(
+            providers, "discover_local_magpie",
+            side_effect=RuntimeError("upstream echoed Authorization: Bearer magpie-dsh017"),
+        ):
+            response = client.post("/api/providers/detect-magpie")
+        self.assertEqual(response.status_code, 502)
+        self.assertNotIn("magpie-dsh017", response.get_data(as_text=True))
+        self.assertIn("[REDACTED]", response.get_json()["message"])
     def test_rejects_unsafe_base_urls_and_invalid_model_ids(self):
         bad_urls = [
             "file:///etc/passwd",
