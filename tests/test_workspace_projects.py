@@ -216,7 +216,8 @@ class WorkspaceProjectApiTests(unittest.TestCase):
             "file_id": file_id, "base_version": 2,
             "old_str": "alpha", "new_str": "changed", "mode": "auto",
         })
-        self.assertEqual(default_ask.status_code, 409, default_ask.get_json())
+        self.assertEqual(default_ask.status_code, 200, default_ask.get_json())
+        self.assertEqual(default_ask.get_json()["code"], 409)
         self.assertEqual(default_ask.get_json()["reason"], "rule_ask")
 
         # A matching deny rule takes precedence over a more specific allow.
@@ -277,7 +278,8 @@ class WorkspaceProjectApiTests(unittest.TestCase):
                 "file_id": file_id, "base_version": 1,
                 "old_str": "", "new_str": "blocked", "mode": "auto",
             })
-            self.assertEqual(blocked.status_code, 409)
+            self.assertEqual(blocked.status_code, 200)
+            self.assertEqual(blocked.get_json()["code"], 409)
             self.assertEqual(blocked.get_json()["reason"], "rule_ask")
 
         status = self.client.get("/api/workspace/auto_status").get_json()
