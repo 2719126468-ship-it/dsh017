@@ -179,7 +179,7 @@ def _restore(args) -> tuple[Path, Path]:
         not isinstance(db_name, str) or not db_name or db_name in (".", "..")
         or Path(db_name).name != db_name or "/" in db_name or "\\" in db_name
         or "\x00" in db_name
-        or db_name in ("providers.json", "provider_secrets.json", "auth_token", "admin_token")
+        or db_name in ("providers.json", "provider_secrets.json", "auth_token", "admin_token", "backup")
     ):
         raise BackupError("database filename must be a safe, non-reserved file name")
     if not _regular_file(archive_path):
