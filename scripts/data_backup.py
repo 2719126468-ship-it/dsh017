@@ -52,7 +52,7 @@ def _integrity_check(path: Path) -> None:
 
 def _resolve_sources(args):
     data_dir = Path(args.data_dir or os.environ.get("DSH017_DATA_DIR", ROOT / "data")).expanduser().resolve()
-    db_path = Path(args.db_path or os.environ.get("DSH017_DB_PATH", data_dir / "bili_data.db")).expanduser().resolve()
+    db_path = Path(args.db_path or os.environ.get("DSH017_DB_PATH", data_dir / "bili_data.db")).expanduser().absolute()
     preset_dir = Path(args.preset_dir or os.environ.get("DSH017_PRESET_DIR", ROOT / "presets")).expanduser().absolute()
     backup_dir = Path(args.backup_dir or os.environ.get("DSH017_BACKUP_DIR", data_dir / "backup")).expanduser().absolute()
     return data_dir, db_path, preset_dir, backup_dir
@@ -156,7 +156,7 @@ def _backup(args) -> Path:
 
 def _safe_member_name(name: str) -> bool:
     path = PurePosixPath(name)
-    if path.is_absolute() or not path.parts or any(part in ("", ".", "..") for part in path.parts):
+    if path.is_absolute() or path.as_posix() != name or not path.parts or any(part in ("", ".", "..") for part in path.parts):
         return False
     if name in ("manifest.json", "database.sqlite3", "providers.json"):
         return True
@@ -171,7 +171,7 @@ def _check_empty_destination(path: Path, label: str) -> None:
 
 
 def _restore(args) -> tuple[Path, Path]:
-    archive_path = Path(args.archive).expanduser().resolve()
+    archive_path = Path(args.archive).expanduser().absolute()
     data_dir = Path(args.data_dir).expanduser().absolute()
     preset_dir = Path(args.preset_dir).expanduser().absolute()
     if not _regular_file(archive_path):
@@ -256,12 +256,14 @@ def _restore(args) -> tuple[Path, Path]:
             try:
                 for item in staged_data.iterdir():
                     target = data_dir / item.name
-                    shutil.copy2(item, target)
+                    with item.open("rb") as source, target.open("xb") as output:
+                        shutil.copyfileobj(source, output)
                     os.chmod(target, 0o600)
                     copied.append(target)
                 for item in staged_presets.iterdir():
                     target = preset_dir / item.name
-                    shutil.copy2(item, target)
+                    with item.open("rb") as source, target.open("xb") as output:
+                        shutil.copyfileobj(source, output)
                     os.chmod(target, 0o600)
                     copied.append(target)
             except Exception:
@@ -301,7 +303,7 @@ def main() -> int:
             print("Restored presets to: " + str(preset_dir))
             print("Provider API keys and auth tokens were intentionally not restored.")
         return 0
-    except BackupError as exc:
+    except (BackupError, OSError, tarfile.TarError) as exc:
         print("ERROR: " + str(exc), file=sys.stderr)
         return 2
 
