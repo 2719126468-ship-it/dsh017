@@ -42,7 +42,7 @@ def _integrity_check(path: Path) -> None:
     if not _regular_file(path):
         raise BackupError("database snapshot is missing or not a regular file")
     try:
-        with sqlite3.connect("file:" + str(path.resolve()) + "?mode=ro", uri=True) as conn:
+        with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as conn:
             result = conn.execute("PRAGMA integrity_check").fetchone()
         if not result or result[0] != "ok":
             raise BackupError("SQLite integrity_check failed")
@@ -72,7 +72,7 @@ def _backup(args) -> Path:
         temp = Path(temp_name)
         db_snapshot = temp / "database.sqlite3"
         try:
-            with sqlite3.connect("file:" + str(db_path) + "?mode=ro", uri=True, timeout=15) as source:
+            with sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True, timeout=15) as source:
                 with sqlite3.connect(db_snapshot) as target:
                     source.backup(target)
             _integrity_check(db_snapshot)
