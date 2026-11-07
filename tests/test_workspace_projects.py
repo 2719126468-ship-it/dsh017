@@ -33,6 +33,22 @@ class WorkspaceProjectApiTests(unittest.TestCase):
         db._db_init_workspace()
         db._db_init_rules()
         db._db_init_chat_conversations()
+        self.assertIs(workspace_routes._db_conn.__globals__, db.__dict__)
+        self.assertEqual(
+            db._DB_PATH,
+            os.path.join(self.db_temp.name, "bili_data.db"),
+        )
+        with db._DB_LOCK:
+            connection = db._db_conn()
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM workspace_rules").fetchone()[0],
+                0,
+            )
+            connection.close()
+        self.assertEqual(
+            self.client.get("/api/workspace/rules").get_json()["items"],
+            [],
+        )
 
         with workspace_routes._AUTO_GUARD_LOCK:
             self._auto_state_before = (
