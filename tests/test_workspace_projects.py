@@ -237,7 +237,8 @@ class WorkspaceProjectApiTests(unittest.TestCase):
             "file_id": file_id, "base_version": 2,
             "old_str": "alpha", "new_str": "must stay blocked", "mode": "auto",
         })
-        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(denied.status_code, 200)
+        self.assertEqual(denied.get_json()["code"], 403)
         self.assertEqual(self.client.get("/api/workspace/files/%d" % file_id).get_json()["content"], "alpha beta")
 
         # Explicit user confirmation must not bypass a deny rule either.
@@ -245,7 +246,8 @@ class WorkspaceProjectApiTests(unittest.TestCase):
             "file_id": file_id, "base_version": 2,
             "old_str": "alpha", "new_str": "also blocked",
         })
-        self.assertEqual(manual_denied.status_code, 403)
+        self.assertEqual(manual_denied.status_code, 200)
+        self.assertEqual(manual_denied.get_json()["code"], 403)
 
         deny_id = next(
             item["id"] for item in items if item["file_pattern"] == "plan*"
