@@ -35,17 +35,18 @@ Each archive is written with mode 0600. It contains a versioned manifest with fi
 
 When optional variables are not set, export the same defaults used by the running service:
 
-    export DSH017_DATA_DIR="$PWD/data"
-    export DSH017_DB_PATH="$DSH017_DATA_DIR/$DB_NAME"
-    export DSH017_BACKUP_DIR="$DSH017_DATA_DIR/backup"
-    export DSH017_PRESET_DIR="$PWD/presets"
+    export DSH017_DATA_DIR="${DSH017_DATA_DIR:-$PWD/data}"
+    DB_NAME="$(basename "${DSH017_DB_PATH:-$DSH017_DATA_DIR/bili_data.db}")"
+    export DSH017_DB_PATH="${DSH017_DB_PATH:-$DSH017_DATA_DIR/$DB_NAME}"
+    export DSH017_BACKUP_DIR="${DSH017_BACKUP_DIR:-$DSH017_DATA_DIR/backup}"
+    export DSH017_PRESET_DIR="${DSH017_PRESET_DIR:-$PWD/presets}"
 
 ## Restore to a new isolated directory
 
 Stop the target DSH-017 services before using the restored directory. First choose new paths; do not point the restore command at the live data or live preset directory:
 
     mkdir -p "$HOME/dsh017-recovery"
-    DB_NAME="$(basename "${DSH017_DB_PATH:-$DSH017_DATA_DIR/bili_data.db}")"
+    DB_NAME="$(basename "$DSH017_DB_PATH")"
     python3 scripts/data_backup.py restore \
       --archive "/path/to/dsh017-backup-....tar.gz" \
       --data-dir "$HOME/dsh017-recovery/data" \
