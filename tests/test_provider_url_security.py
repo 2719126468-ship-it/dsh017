@@ -69,6 +69,29 @@ class ProviderUrlSecurityTests(unittest.TestCase):
         ]):
             self.assertFalse(validate_provider_url("https://api.example.test/v1"))
 
+    def test_ipv6_ula_and_link_local_dns_answers_are_rejected(self):
+        for address in ("fc00::1", "fd12:3456::1", "fe80::1", "::ffff:127.0.0.1"):
+            with self.subTest(address=address):
+                answers = [(10, 1, 6, "", (address, 443, 0, 0))]
+                with patch("app.provider_transport.socket.getaddrinfo", return_value=answers):
+                    with self.assertRaisesRegex(ValueError, "非公网 DNS 地址"):
+                        resolve_provider_target("https://api.example.test/v1")
+
+    def test_mixed_public_ipv4_and_ipv6_ula_dns_answers_are_rejected(self):
+        answers = [
+            (2, 1, 6, "", ("8.8.8.8", 443)),
+            (10, 1, 6, "", ("fd00::10", 443, 0, 0)),
+        ]
+        with patch("app.provider_transport.socket.getaddrinfo", return_value=answers):
+            with self.assertRaisesRegex(ValueError, "非公网 DNS 地址"):
+                resolve_provider_target("https://api.example.test/v1")
+
+    def test_global_ipv6_provider_dns_answer_is_allowed_and_pinned(self):
+        answers = [(10, 1, 6, "", ("2606:4700:4700::1111", 443, 0, 0))]
+        with patch("app.provider_transport.socket.getaddrinfo", return_value=answers):
+            target = resolve_provider_target("https://api.example.test/v1")
+        self.assertEqual(target.address, "2606:4700:4700::1111")
+
 
 if __name__ == "__main__":
     unittest.main()
