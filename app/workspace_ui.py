@@ -24,7 +24,7 @@ html,body{height:100%;margin:0;background:var(--ws-bg);color:var(--ws-text);
 body{overflow:hidden}
 button,input,textarea,select{font:inherit}
 button{cursor:pointer}
-.ws-app{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;background:var(--ws-bg)}
+.ws-app{height:100vh;height:100dvh;height:var(--ws-vh,100dvh);min-height:0;display:flex;flex-direction:column;background:var(--ws-bg)}
 .ws-topbar{height:54px;flex:none;display:flex;align-items:center;gap:10px;padding:0 13px;
  background:var(--ws-surface);border-bottom:1px solid var(--ws-line);z-index:3}
 .ws-brand{display:flex;align-items:center;gap:9px;min-width:0;margin-right:auto}
@@ -240,6 +240,14 @@ button{cursor:pointer}
  var expanded={},currentParent=null,editorMode="source",aiHistory=[],activeReader=null,aiBusy=false;
  var pendingEdit=null;
  var layout=$("mainLayout"),tree=$("fileTree"),editor=$("editor"),preview=$("preview");
+ function syncViewportHeight(){
+  var viewport=window.visualViewport;
+  var height=viewport&&viewport.height?viewport.height:window.innerHeight;
+  if(height>0)document.documentElement.style.setProperty("--ws-vh",Math.round(height)+"px");
+ }
+ syncViewportHeight();
+ window.addEventListener("resize",syncViewportHeight,{passive:true});
+ if(window.visualViewport){window.visualViewport.addEventListener("resize",syncViewportHeight,{passive:true});}
  var providers=[];
  function api(path,options){
   return fetch(path,options||{}).then(function(r){return r.json().then(function(j){if(!r.ok||j.code!==0)throw new Error(j.message||("HTTP "+r.status));return j;});});
