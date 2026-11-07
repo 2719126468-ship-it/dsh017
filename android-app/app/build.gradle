@@ -3,6 +3,28 @@ plugins {
     id "com.chaquo.python"
 }
 
+// Release signing is deliberately separate from CI debug signing. A release
+// task must have a persistent keystore supplied by protected CI secrets.
+def releaseStorePath = System.getenv("DSH017_ANDROID_KEYSTORE_PATH")
+def releaseStorePassword = System.getenv("DSH017_ANDROID_STORE_PASSWORD")
+def releaseKeyAlias = System.getenv("DSH017_ANDROID_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("DSH017_ANDROID_KEY_PASSWORD")
+def releaseSigningConfigured = [
+    releaseStorePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+].every { it != null && !it.trim().isEmpty() } &&
+    new File(releaseStorePath ?: "").isFile()
+def releaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase().contains("release")
+}
+if (releaseBuildRequested && !releaseSigningConfigured) {
+    throw new GradleException(
+        "Release APK signing is not configured. Supply the persistent DSH017 Android signing secrets; refusing to use a temporary debug key."
+    )
+}
+
 android {
     namespace "com.dsh017.android"
     compileSdk 35
@@ -36,10 +58,26 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    signingConfigs {
+        release {
+            if (releaseSigningConfigured) {
+                storeFile file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix ".debug"
             versionNameSuffix "-debug"
+        }
+        release {
+            if (releaseSigningConfigured) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

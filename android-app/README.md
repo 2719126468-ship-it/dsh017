@@ -32,22 +32,35 @@ The 64-bit build uses the Android ARM64 wheel of `curl_cffi` (from the Flet Andr
 
 The ARMv7 build uses the project's `requests` fallback because there is no compatible 32-bit ARM Android `curl_cffi` wheel in that distribution. Bilibili and novel endpoints which rely on browser TLS fingerprinting may therefore be less reliable on 32-bit devices. This is an upstream binary-wheel limitation, not a UI restriction.
 
-## Build
+## CI builds and versioned releases
 
-Run from the repository root with JDK 17, Android SDK 35, Gradle 8.13 and the matching Python version:
+Pull requests, branch pushes and manual CI runs build **debug** APKs for ARMv7 and ARM64. Those are test artifacts retained by GitHub Actions for 30 days. They use the Android debug signing identity and the debug application ID suffix; do not treat them as upgrade-compatible release APKs.
+
+A push of a `v*` tag runs the separate **Release** build for both ABIs. Release APKs are signed with one persistent keystore, and the publish job verifies that both APKs have the same signer certificate SHA-256 fingerprint before creating the GitHub Release. The release includes both APKs, `SHA256SUMS.txt`, and `SIGNING_CERT_SHA256.txt`. If signing secrets are missing or invalid, the Release build fails closed and does not fall back to a temporary debug key.
+
+### Configure the persistent release signing key
+
+Generate the keystore locally and keep a secure offline backup. Never commit the keystore or share its passwords in Issues, chat, or logs.
 
 ```bash
-# 32-bit ARM
-python3.11 --version
-gradle -p android-app assembleArm32Debug
-
-# 64-bit ARM
-python3.13 --version
-gradle -p android-app assembleArm64Debug
+keytool -genkeypair -v -keystore dsh017-release.jks \
+  -alias dsh017-release -keyalg RSA -keysize 3072 -validity 10000
+base64 -w 0 dsh017-release.jks
 ```
 
-GitHub Actions builds both ABI variants on pushes to `main` / `feature/**` and on pull requests targeting `main`. Each run uploads separate installable APK artifacts with a 30-day retention period.
+In the repository's **Settings → Secrets and variables → Actions**, create these repository secrets:
 
-Pushing a version tag matching `v*` also runs the release job after both builds succeed. The job attaches the ARMv7 APK, ARM64 APK, and `SHA256SUMS.txt` to a versioned GitHub Release. Verify the checksum for the downloaded APK before installing it.
+- `DSH017_ANDROID_KEYSTORE_BASE64`: the base64 output of the keystore file.
+- `DSH017_ANDROID_STORE_PASSWORD`: keystore password.
+- `DSH017_ANDROID_KEY_ALIAS`: `dsh017-release` (or the alias you created).
+- `DSH017_ANDROID_KEY_PASSWORD`: key password.
 
-The CI APKs are debug-signed sideload builds, not Play Store release builds. A successful build proves packaging only; it does not replace installation and smoke testing on a real ARM32 / ARM64 device.
+Do not rotate or replace this signing identity for ordinary releases. Losing it prevents Android from accepting an in-place update signed by the same application identity. Keep the offline keystore backup and recovery information separate from the repository.
+
+The tagged Release workflow does not publish debug APKs. It requires all four secrets, validates the keystore and alias, signs both ABI variants, and checks that their signing certificate fingerprints match. A successful signed build still does not replace installation and upgrade testing on real devices.
+
+### Migration from the published v0.1.2 APK
+
+The published `v0.1.2` APK was produced from the Debug variant: the tagged source declares the package ID `com.dsh017.android` with the Debug suffix `.debug`, and the tag workflow packaged `assembleArm32Debug` / `assembleArm64Debug`. The first persistent Release build uses the normal Release package ID `com.dsh017.android`. Android therefore treats the legacy Debug package and the new Release package as separate apps. They can coexist, but their private SQLite files, Android Keystore entries, and WebView data are not automatically copied.
+
+**Keep the legacy app installed. Do not uninstall it to install the new Release build until a verified export / restore migration has been completed.** The new persistent signing identity guarantees consistency for future Release-to-Release updates; it cannot recreate the private key used by a previous ephemeral GitHub-hosted debug runner. Backup / restore and migration must be validated before the legacy installation can safely be retired.
