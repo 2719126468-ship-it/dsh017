@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from app.security import validate_provider_url
-from app.provider_transport import validate_provider_url_syntax
+from app.provider_transport import resolve_provider_target, validate_provider_url_syntax
 
 
 class ProviderUrlSecurityTests(unittest.TestCase):
