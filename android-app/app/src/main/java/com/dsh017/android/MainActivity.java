@@ -304,8 +304,11 @@ public class MainActivity extends Activity {
                 if (!outputDir.exists() && !outputDir.mkdirs()) {
                     throw new IOException("无法创建备份临时目录");
                 }
+                File dataDir = appDataDirectory();
+                File presetDir = new File(dataDir, "presets");
                 String path = Python.getInstance().getModule("android_entry")
-                        .callAttr("create_backup_archive", outputDir.getAbsolutePath()).toString();
+                        .callAttr("create_backup_archive", outputDir.getAbsolutePath(),
+                                dataDir.getAbsolutePath(), presetDir.getAbsolutePath()).toString();
                 File archive = new File(path);
                 if (!archive.isFile() || archive.length() <= 0
                         || archive.length() > MAX_MIGRATION_ARCHIVE_BYTES) {
