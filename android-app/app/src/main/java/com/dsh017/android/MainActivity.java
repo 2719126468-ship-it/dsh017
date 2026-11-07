@@ -33,12 +33,16 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final String START_URL = "http://127.0.0.1:8080/";
     private static final String[] LOCAL_PORTS = {"8080", "8084", "8091", "8092"};
+    private static final int REQUEST_IMPORT_BACKUP = 4101;
+    private static final int REQUEST_EXPORT_BACKUP = 4102;
+    private static final long MAX_MIGRATION_ARCHIVE_BYTES = 512L * 1024L * 1024L;
 
     private final ExecutorService backendExecutor = Executors.newSingleThreadExecutor();
     private WebView webView;
@@ -47,13 +51,15 @@ public class MainActivity extends Activity {
     private boolean backendReady = false;
     private boolean starting = false;
     private ApiKeyStore apiKeyStore;
+    private File pendingExportArchive;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         apiKeyStore = new ApiKeyStore(this);
         buildLayout();
-        startBackend();
+        if (hasExistingDatabase()) startBackend();
+        else showFirstRunMigrationDialog();
     }
 
     private void buildLayout() {
@@ -78,10 +84,17 @@ public class MainActivity extends Activity {
         keyButton.setOnClickListener(v -> showApiKeyDialog());
         toolbar.addView(keyButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)));
 
+        Button migrationButton = toolbarButton("数据");
+        migrationButton.setOnClickListener(v -> showDataMigrationMenu());
+        LinearLayout.LayoutParams migrationParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(36));
+        migrationParams.leftMargin = dp(6);
+        toolbar.addView(migrationButton, migrationParams);
+
         Button reloadButton = toolbarButton("刷新");
         reloadButton.setOnClickListener(v -> {
             if (backendReady && webView != null) webView.reload();
-            else startBackend();
+            else if (!starting) showDataMigrationMenu();
         });
         LinearLayout.LayoutParams reloadParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, dp(36));
@@ -226,6 +239,198 @@ public class MainActivity extends Activity {
             startActivity(new Intent(Intent.ACTION_VIEW, uri));
         } catch (Exception error) {
             Toast.makeText(this, "没有可打开此链接的应用", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private File appDataDirectory() {
+        return new File(getFilesDir(), "dsh017");
+    }
+
+    private boolean hasExistingDatabase() {
+        File database = new File(appDataDirectory(), "bili_data.db");
+        return database.isFile() && database.length() > 0;
+    }
+
+    private void showFirstRunMigrationDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("导入旧版 DSH017 数据")
+                .setMessage("如果你有从旧版导出的 .tar.gz 备份，可以先导入聊天记录、Workspace、收藏、预设和供应商配置。API Key 与 Android Keystore 密钥不会迁移，需要重新配置。")
+                .setPositiveButton("选择备份文件", (dialog, which) -> openBackupPicker())
+                .setNeutralButton("新建空白实例", (dialog, which) -> startBackend())
+                .setOnCancelListener(dialog -> startBackend())
+                .show();
+    }
+
+    private void showDataMigrationMenu() {
+        if (backendReady) {
+            new AlertDialog.Builder(this)
+                    .setTitle("数据备份")
+                    .setItems(new String[]{"导出备份文件"}, (dialog, which) -> createBackupArchive())
+                    .setNegativeButton("取消", null)
+                    .show();
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("数据迁移")
+                .setItems(new String[]{"导入备份文件", "以空白数据启动"}, (dialog, which) -> {
+                    if (which == 0) openBackupPicker();
+                    else startBackend();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void openBackupPicker() {
+        if (backendReady || starting) {
+            Toast.makeText(this, "导入必须在服务启动前进行；请勿覆盖当前数据", Toast.LENGTH_LONG).show();
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_TITLE, "选择 DSH017 .tar.gz 备份文件");
+        startActivityForResult(intent, REQUEST_IMPORT_BACKUP);
+    }
+
+    private void createBackupArchive() {
+        if (!backendReady || starting) {
+            Toast.makeText(this, "请先启动服务，再导出备份", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        statusView.setText("正在创建本地数据备份…");
+        backendExecutor.execute(() -> {
+            try {
+                File outputDir = new File(getCacheDir(), "migration-export");
+                if (!outputDir.exists() && !outputDir.mkdirs()) {
+                    throw new IOException("无法创建备份临时目录");
+                }
+                String path = Python.getInstance().getModule("android_entry")
+                        .callAttr("create_backup_archive", outputDir.getAbsolutePath()).toString();
+                File archive = new File(path);
+                if (!archive.isFile() || archive.length() <= 0
+                        || archive.length() > MAX_MIGRATION_ARCHIVE_BYTES) {
+                    throw new IOException("备份文件不存在或超过 512 MB");
+                }
+                runOnUiThread(() -> {
+                    pendingExportArchive = archive;
+                    statusView.setText("备份已生成，请选择保存位置");
+                    Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("application/gzip");
+                    intent.putExtra(Intent.EXTRA_TITLE, archive.getName());
+                    startActivityForResult(intent, REQUEST_EXPORT_BACKUP);
+                });
+            } catch (Throwable error) {
+                runOnUiThread(() -> {
+                    statusView.setText("备份失败：" + shortError(error));
+                    Toast.makeText(this, "备份失败：" + shortError(error), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    private void importBackup(Uri uri) {
+        if (backendReady || starting) {
+            Toast.makeText(this, "服务已经启动，拒绝覆盖现有应用数据", Toast.LENGTH_LONG).show();
+            return;
+        }
+        starting = true;
+        statusView.setText("正在读取并验证备份文件…");
+        progressBar.setVisibility(View.VISIBLE);
+        backendExecutor.execute(() -> {
+            File archive = new File(getCacheDir(), "migration-import.tar.gz");
+            try {
+                try (InputStream input = getContentResolver().openInputStream(uri);
+                     FileOutputStream output = new FileOutputStream(archive, false)) {
+                    if (input == null) throw new IOException("无法打开所选备份文件");
+                    copyBounded(input, output, MAX_MIGRATION_ARCHIVE_BYTES);
+                    output.getFD().sync();
+                }
+                File dataDir = appDataDirectory();
+                File presetDir = new File(dataDir, "presets");
+                Python.getInstance().getModule("android_entry").callAttr(
+                        "restore_backup_archive",
+                        archive.getAbsolutePath(),
+                        dataDir.getAbsolutePath(),
+                        presetDir.getAbsolutePath());
+                if (!new File(dataDir, "bili_data.db").isFile()) {
+                    throw new IOException("恢复未生成预期的数据库文件");
+                }
+                archive.delete();
+                runOnUiThread(() -> {
+                    starting = false;
+                    statusView.setText("备份已验证并恢复，正在启动内置服务…");
+                    startBackend();
+                });
+            } catch (Throwable error) {
+                archive.delete();
+                runOnUiThread(() -> {
+                    starting = false;
+                    progressBar.setVisibility(View.GONE);
+                    statusView.setText("导入失败：" + shortError(error));
+                    new AlertDialog.Builder(this)
+                            .setTitle("备份导入失败")
+                            .setMessage(shortError(error) + "\n原有应用数据未被覆盖。你可以重新选择备份文件，或以空白实例启动。")
+                            .setPositiveButton("重新选择", (dialog, which) -> openBackupPicker())
+                            .setNeutralButton("新建空白实例", (dialog, which) -> startBackend())
+                            .setNegativeButton("稍后", null)
+                            .show();
+                });
+            }
+        });
+    }
+
+    private void exportBackup(Uri uri) {
+        File archive = pendingExportArchive;
+        pendingExportArchive = null;
+        if (archive == null || !archive.isFile()) {
+            Toast.makeText(this, "备份临时文件已失效，请重新导出", Toast.LENGTH_LONG).show();
+            return;
+        }
+        backendExecutor.execute(() -> {
+            try (InputStream input = new java.io.FileInputStream(archive);
+                 OutputStream output = getContentResolver().openOutputStream(uri, "w")) {
+                if (output == null) throw new IOException("无法写入所选位置");
+                copyBounded(input, output, MAX_MIGRATION_ARCHIVE_BYTES);
+                output.flush();
+                runOnUiThread(() -> Toast.makeText(this, "备份已保存", Toast.LENGTH_LONG).show());
+            } catch (Throwable error) {
+                runOnUiThread(() -> Toast.makeText(this, "保存备份失败：" + shortError(error), Toast.LENGTH_LONG).show());
+            } finally {
+                archive.delete();
+            }
+        });
+    }
+
+    private long copyBounded(InputStream input, OutputStream output, long maxBytes) throws IOException {
+        byte[] buffer = new byte[8192];
+        long total = 0;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            total += read;
+            if (total > maxBytes) throw new IOException("备份文件超过 512 MB 限制");
+            output.write(buffer, 0, read);
+        }
+        return total;
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            if (requestCode == REQUEST_EXPORT_BACKUP && pendingExportArchive != null) {
+                pendingExportArchive.delete();
+                pendingExportArchive = null;
+            }
+            if (requestCode == REQUEST_IMPORT_BACKUP) {
+                Toast.makeText(this, "未选择备份文件", Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
+        if (requestCode == REQUEST_IMPORT_BACKUP) {
+            importBackup(data.getData());
+        } else if (requestCode == REQUEST_EXPORT_BACKUP) {
+            exportBackup(data.getData());
         }
     }
 
