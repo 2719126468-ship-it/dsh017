@@ -113,6 +113,16 @@ export DSH017_NOVEL_LEGACY_HTTP_PROXIES=1
 
 若主机有多张网卡，自动识别未覆盖到用于本机访问的地址，可在启动前设置 `DSH017_AUTH_EXEMPT_IPS`，填写主机自身的精确 IP，多个地址用逗号分隔；不要填写整个局域网网段。也可以通过 `DSH017_AUTH_TOKEN` 和 `DSH017_ADMIN_TOKEN` 环境变量自定义 Token（至少 32 个字符）。更换 Token 后重启服务。不要把 Token 写入仓库或分享给其他人；HTTP Basic/Bearer 在普通 HTTP 网络中不加密，跨不可信网络访问应使用 HTTPS 或 VPN。
 
+### 完整数据备份与恢复
+
+除 SQLite 每日快照外，项目还提供独立的本地备份归档工具：它将一致性数据库快照、用户预设和不含密钥的供应商元数据打包，并以 SHA-256 清单验证完整性。恢复必须写入新的空目录，不会覆盖现有数据。API Key、auth/admin Token 和 Android Keystore 项目不会导出；恢复后需要重新配置凭据。
+
+操作步骤、路径环境变量、恢复校验与失败回滚见 [备份与恢复指南](docs/BACKUP_RESTORE.md)。在隔离临时目录执行自动演练：
+
+```bash
+python3 -m unittest tests.test_backup_restore -v
+```
+
 ### 数据目录与测试
 
 默认运行数据保存在项目目录的 `data/`（数据库、备份和日志），预设保存在 `presets/`。可通过 `DSH017_DATA_DIR`、`DSH017_DB_PATH`、`DSH017_BACKUP_DIR`、`DSH017_PRESET_DIR` 自定义位置。无需以 root 身份运行。首次启动时，如果新数据目录为空且旧的 `/root/bili_data.db` 或 `/root/presets` 仍存在，会自动复制旧数据库和缺失的自定义预设；已有新数据不会被覆盖。
