@@ -134,14 +134,16 @@ def wait_ready(timeout_seconds=45):
 
 
 
-def create_backup_archive(output_dir):
-    """Create an application-data archive in a caller-provided private directory."""
+def create_backup_archive(output_dir, data_dir, preset_dir):
+    """Create an archive from the Android app's explicit private storage paths."""
     from argparse import Namespace
     from data_backup import _backup
+    data_dir = os.path.abspath(data_dir)
+    preset_dir = os.path.abspath(preset_dir)
     return str(_backup(Namespace(
-        data_dir=os.environ.get("DSH017_DATA_DIR"),
-        db_path=os.environ.get("DSH017_DB_PATH"),
-        preset_dir=os.environ.get("DSH017_PRESET_DIR"),
+        data_dir=data_dir,
+        db_path=os.path.join(data_dir, "bili_data.db"),
+        preset_dir=preset_dir,
         backup_dir=output_dir,
     )))
 
