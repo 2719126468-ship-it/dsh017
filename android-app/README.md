@@ -58,3 +58,9 @@ In the repository's **Settings → Secrets and variables → Actions**, create t
 Do not rotate or replace this signing identity for ordinary releases. Losing it prevents Android from accepting an in-place update signed by the same application identity. Keep the offline keystore backup and recovery information separate from the repository.
 
 The tagged Release workflow does not publish debug APKs. It requires all four secrets, validates the keystore and alias, signs both ABI variants, and checks that their signing certificate fingerprints match. A successful signed build still does not replace installation and upgrade testing on real devices.
+
+### Migration from the published v0.1.2 APK
+
+The published `v0.1.2` APK was produced from the Debug variant: the tagged source declares the package ID `com.dsh017.android` with the Debug suffix `.debug`, and the tag workflow packaged `assembleArm32Debug` / `assembleArm64Debug`. The first persistent Release build uses the normal Release package ID `com.dsh017.android`. Android therefore treats the legacy Debug package and the new Release package as separate apps. They can coexist, but their private SQLite files, Android Keystore entries, and WebView data are not automatically copied.
+
+**Keep the legacy app installed. Do not uninstall it to install the new Release build until a verified export / restore migration has been completed.** The new persistent signing identity guarantees consistency for future Release-to-Release updates; it cannot recreate the private key used by a previous ephemeral GitHub-hosted debug runner. Backup / restore and migration must be validated before the legacy installation can safely be retired.
