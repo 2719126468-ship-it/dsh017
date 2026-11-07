@@ -67,5 +67,28 @@ class AndroidPackagingContractTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v4", workflow)
 
 
+    def test_release_build_requires_persistent_signing_and_checks_both_abis(self):
+        gradle = self.read("app/build.gradle")
+        workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
+        for secret in (
+            "DSH017_ANDROID_KEYSTORE_PATH",
+            "DSH017_ANDROID_STORE_PASSWORD",
+            "DSH017_ANDROID_KEY_ALIAS",
+            "DSH017_ANDROID_KEY_PASSWORD",
+        ):
+            self.assertIn(secret, gradle)
+            self.assertIn(secret, workflow)
+        self.assertIn("releaseBuildRequested", gradle)
+        self.assertIn("throw new GradleException", gradle)
+        self.assertIn("signingConfig signingConfigs.release", gradle)
+        self.assertIn("assembleArm32Release", workflow)
+        self.assertIn("assembleArm64Release", workflow)
+        self.assertIn('/build-tools/35.0.0/apksigner" verify --print-certs', workflow)
+        self.assertIn("ARM32_CERT", workflow)
+        self.assertIn("ARM64_CERT", workflow)
+        self.assertIn("SHA256SUMS.txt", workflow)
+        self.assertIn("DSH017_ANDROID_KEYSTORE_BASE64", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
