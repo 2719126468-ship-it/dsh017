@@ -85,6 +85,17 @@ class ProviderRegistryTests(unittest.TestCase):
                     providers.update_provider("enabled-provider", {"enabled": invalid})
         self.assertFalse(providers.get_provider("enabled-provider")["enabled"])
 
+        for index, invalid in enumerate(("false", "true", 0, 1, None)):
+            with self.subTest(create_value=invalid):
+                with self.assertRaisesRegex(ValueError, "enabled 必须是布尔值"):
+                    providers.add_provider({
+                        "id": "invalid-enabled-%d" % index,
+                        "name": "Invalid Enabled",
+                        "base_url": "https://api.example.test/v1",
+                        "models": ["sample-chat"],
+                        "enabled": invalid,
+                    })
+
     def test_rejects_unsafe_base_urls_and_invalid_model_ids(self):
         bad_urls = [
             "file:///etc/passwd",
