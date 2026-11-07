@@ -298,7 +298,8 @@ class WorkspaceProjectApiTests(unittest.TestCase):
             "file_id": file_id, "base_version": 1,
             "old_str": "", "new_str": "must remain unchanged", "mode": "auto",
         })
-        self.assertEqual(downgraded.status_code, 409)
+        self.assertEqual(downgraded.status_code, 200)
+        self.assertEqual(downgraded.get_json()["code"], 409)
         self.assertEqual(downgraded.get_json()["reason"], "auto_downgraded")
         stored = self.client.get("/api/workspace/files/%d" % file_id).get_json()
         self.assertEqual(stored["content"], "")
