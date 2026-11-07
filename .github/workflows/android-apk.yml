@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, "feature/**"]
+    branches: [main, "feature/**", "fix/**"]
     tags: ["v*"]
   pull_request:
     branches: [main]
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build ${{ matrix.artifact }}
+    name: Build CI ${{ matrix.artifact }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -61,51 +61,162 @@ jobs:
         with:
           gradle-version: "8.13"
 
-      - name: Build APK
+      - name: Build CI APK
         run: gradle -p android-app ${{ matrix.task }} --stacktrace
 
-      - name: Stage APK
+      - name: Stage CI APK
         run: |
+          set -euo pipefail
           mkdir -p dist
           cp "android-app/app/build/outputs/apk/${{ matrix.flavor }}/debug/app-${{ matrix.flavor }}-debug.apk" \
-             "dist/DSH017-${{ matrix.artifact }}.apk"
+             "dist/DSH017-CI-${{ matrix.artifact }}.apk"
           sha256sum dist/*.apk
 
-      - name: Upload installable APK
+      - name: Upload CI APK
         uses: actions/upload-artifact@v4
         with:
-          name: DSH017-${{ matrix.artifact }}
-          path: dist/DSH017-${{ matrix.artifact }}.apk
+          name: DSH017-CI-${{ matrix.artifact }}
+          path: dist/DSH017-CI-${{ matrix.artifact }}.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  build-release:
+    name: Sign Release ${{ matrix.artifact }}
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: arm32
+            task: assembleArm32Release
+            python: "3.11"
+            artifact: ARMv7-32bit
+          - flavor: arm64
+            task: assembleArm64Release
+            python: "3.13"
+            artifact: ARM64-64bit
+    env:
+      DSH017_ANDROID_KEYSTORE_BASE64: ${{ secrets.DSH017_ANDROID_KEYSTORE_BASE64 }}
+      DSH017_ANDROID_STORE_PASSWORD: ${{ secrets.DSH017_ANDROID_STORE_PASSWORD }}
+      DSH017_ANDROID_KEY_ALIAS: ${{ secrets.DSH017_ANDROID_KEY_ALIAS }}
+      DSH017_ANDROID_KEY_PASSWORD: ${{ secrets.DSH017_ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up matching Python for Chaquopy
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Install Android platform
+        run: yes | sdkmanager --licenses && sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Prepare persistent signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${DSH017_ANDROID_KEYSTORE_BASE64:?Missing DSH017_ANDROID_KEYSTORE_BASE64 repository secret}"
+          : "${DSH017_ANDROID_STORE_PASSWORD:?Missing DSH017_ANDROID_STORE_PASSWORD repository secret}"
+          : "${DSH017_ANDROID_KEY_ALIAS:?Missing DSH017_ANDROID_KEY_ALIAS repository secret}"
+          : "${DSH017_ANDROID_KEY_PASSWORD:?Missing DSH017_ANDROID_KEY_PASSWORD repository secret}"
+          KEYSTORE_PATH="$RUNNER_TEMP/dsh017-release-signing.jks"
+          printf '%s' "$DSH017_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          keytool -list -keystore "$KEYSTORE_PATH" \
+            -storepass "$DSH017_ANDROID_STORE_PASSWORD" \
+            -alias "$DSH017_ANDROID_KEY_ALIAS" >/dev/null 2>&1
+          echo "DSH017_ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Build persistently signed Release APK
+        run: gradle -p android-app ${{ matrix.task }} --stacktrace
+        env:
+          DSH017_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/dsh017-release-signing.jks
+          DSH017_ANDROID_STORE_PASSWORD: ${{ secrets.DSH017_ANDROID_STORE_PASSWORD }}
+          DSH017_ANDROID_KEY_ALIAS: ${{ secrets.DSH017_ANDROID_KEY_ALIAS }}
+          DSH017_ANDROID_KEY_PASSWORD: ${{ secrets.DSH017_ANDROID_KEY_PASSWORD }}
+
+      - name: Verify APK signature and stage Release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          APK="android-app/app/build/outputs/apk/${{ matrix.flavor }}/release/app-${{ matrix.flavor }}-release.apk"
+          OUTPUT="dist/DSH017-${{ matrix.artifact }}.apk"
+          test -s "$APK"
+          cp "$APK" "$OUTPUT"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUTPUT"
+          CERT_SHA256="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$OUTPUT" | awk -F ': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}')"
+          test -n "$CERT_SHA256"
+          printf '%s\n' "$CERT_SHA256" > "dist/DSH017-${{ matrix.artifact }}.cert-sha256"
+          sha256sum "$OUTPUT"
+
+      - name: Upload signed Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSH017-${{ matrix.artifact }}-SIGNED
+          path: dist/*
           if-no-files-found: error
           retention-days: 30
 
   publish-release:
-    name: Publish GitHub Release
+    name: Publish signed GitHub Release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, build-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read
     steps:
-      - name: Download both APK variants
+      - name: Download signed APK variants
         uses: actions/download-artifact@v4
         with:
-          pattern: DSH017-*
+          pattern: DSH017-*-SIGNED
           merge-multiple: true
           path: dist
 
-      - name: Verify release files and generate checksums
+      - name: Verify release files, shared signer and generate checksums
         shell: bash
         run: |
           set -euo pipefail
-          test -s dist/DSH017-ARMv7-32bit.apk
-          test -s dist/DSH017-ARM64-64bit.apk
+          ARM32="dist/DSH017-ARMv7-32bit.apk"
+          ARM64="dist/DSH017-ARM64-64bit.apk"
+          test -s "$ARM32"
+          test -s "$ARM64"
+          ARM32_CERT="$(cat dist/DSH017-ARMv7-32bit.cert-sha256)"
+          ARM64_CERT="$(cat dist/DSH017-ARM64-64bit.cert-sha256)"
+          test -n "$ARM32_CERT"
+          test "$ARM32_CERT" = "$ARM64_CERT"
+          printf '%s\n' "$ARM32_CERT" > dist/SIGNING_CERT_SHA256.txt
           (cd dist && sha256sum DSH017-ARMv7-32bit.apk DSH017-ARM64-64bit.apk > SHA256SUMS.txt)
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ARM32"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$ARM64"
           ls -lh dist
           cat dist/SHA256SUMS.txt
+          cat dist/SIGNING_CERT_SHA256.txt
 
-      - name: Publish versioned release
+      - name: Publish signed versioned release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -121,7 +232,9 @@ jobs:
             - Android 8.1+ (API 27).
             - Install the ARM64 APK on 64-bit ARM devices.
             - Install the ARMv7 APK on 32-bit ARM devices.
-            - Configure your own Zhipu API key in the app. No provider key is bundled.
+            - Both APKs were signed with the same persistent release certificate; see SIGNING_CERT_SHA256.txt.
+            - APK SHA256 values are listed in SHA256SUMS.txt.
+            - Configure your own provider API keys in the app. No provider key is bundled.
             - The embedded services bind to loopback; SQLite and chat history stay in app-private storage.
 
             See [Android installation notes](https://github.com/2719126468-ship-it/dsh017/blob/main/android-app/README.md).
@@ -129,3 +242,4 @@ jobs:
             dist/DSH017-ARMv7-32bit.apk
             dist/DSH017-ARM64-64bit.apk
             dist/SHA256SUMS.txt
+            dist/SIGNING_CERT_SHA256.txt
