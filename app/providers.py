@@ -343,8 +343,9 @@ def _safe_upstream_error(error, *secret_values, limit=300):
         if isinstance(secret, str) and len(secret) >= 4:
             message = message.replace(secret, "[REDACTED]")
     # Upstream services occasionally echo Authorization headers in error bodies.
+    search_from = 0
     while True:
-        start = message.lower().find("bearer ")
+        start = message.lower().find("bearer ", search_from)
         if start < 0:
             break
         value_start = start + 7
@@ -352,6 +353,7 @@ def _safe_upstream_error(error, *secret_values, limit=300):
         while value_end < len(message) and not message[value_end].isspace():
             value_end += 1
         message = message[:value_start] + "[REDACTED]" + message[value_end:]
+        search_from = value_start + len("[REDACTED]")
     message = "".join(ch for ch in message if ord(ch) >= 32 or ch == "\t")
     return message[:limit]
 
