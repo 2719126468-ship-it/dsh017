@@ -2,10 +2,12 @@ import os
 import tempfile
 import unittest
 import uuid
+from unittest.mock import patch
 
 os.environ.setdefault("DSH017_DATA_DIR", tempfile.mkdtemp(prefix="dsh017-workspace-tests-"))
 
 from flask import Flask
+import app.db as db
 import app.workspace_routes as workspace_routes
 from app.workspace_routes import workspace_bp
 
@@ -18,6 +20,20 @@ class WorkspaceProjectApiTests(unittest.TestCase):
         self.project_id = None
         self.file_ids = []
         self.rule_ids = []
+
+        # Use a fresh SQLite database per test. The default test data directory
+        # is shared across the unittest process, so rules created by other
+        # modules must not affect the Workspace permission tests.
+        self.db_temp = tempfile.TemporaryDirectory(prefix="dsh017-workspace-case-")
+        self.db_path_patch = patch.object(
+            db, "_DB_PATH", os.path.join(self.db_temp.name, "bili_data.db")
+        )
+        self.db_path_patch.start()
+        db._db_init()
+        db._db_init_workspace()
+        db._db_init_rules()
+        db._db_init_chat_conversations()
+
         with workspace_routes._AUTO_GUARD_LOCK:
             self._auto_state_before = (
                 workspace_routes._AUTO_BLOCK_STREAK,
@@ -35,6 +51,8 @@ class WorkspaceProjectApiTests(unittest.TestCase):
             self.client.delete("/api/workspace/projects/" + self.project_id)
         with workspace_routes._AUTO_GUARD_LOCK:
             workspace_routes._AUTO_BLOCK_STREAK, workspace_routes._AUTO_DOWNGRADED = self._auto_state_before
+        self.db_path_patch.stop()
+        self.db_temp.cleanup()
 
     def test_project_file_tree_versions_and_restore(self):
         created = self.client.post("/api/workspace/projects", json={
