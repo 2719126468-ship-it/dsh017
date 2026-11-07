@@ -832,3 +832,42 @@ DSH-017 的成功不以页面数量、供应商数量、模型数量或 Agent �
 7. **移动可达：** 用户可以通过 Android 完成主要高频操作，而不被设备资源限制拖垮。
 
 > **最终战略判断：** DSH-017 以个人 AI 工作平台为核心，以现有个人门户和媒体服务为入口与场景，以受控 Agent 作为执行引擎，以个人数据和跨模块工作流形成长期价值。先做好一个人每天真正愿意使用、数据真正可控、关键任务真正可靠完成的系统，再考虑扩展为更广泛的个人 AI 生态。
+
+
+---
+
+## 16. P0 验证状态增补（2026-11-07，PR #42 / #43 合入后）
+
+本节是本日后续主线提交的状态快照，用于修正第 0.2 节建立时的历史状态；历史快照保留，不追溯改写。
+
+### 16.1 当前主线与自动化证据
+
+- 当前主线基线：`c29c025cfd1c6932ea6ab63b7e2636c9394dc5a8`。
+- Main CI：Python 3.10 / 3.11 / 3.12 全部通过，Actions run [#42365543692](https://github.com/2719126468-ship-it/dsh017/actions/runs/42365543692)。
+- Main Android CI：ARMv7 与 ARM64 构建均通过，Actions run [#42365543649](https://github.com/2719126468-ship-it/dsh017/actions/runs/42365543649)。该 run 的 Release 签名 / 发布 job 因本次是普通分支提交而跳过；这不是一次正式签名 Release。
+- PR #42 已合入：Workspace 编辑大小限制、默认 ask / deny 优先级 / 自动编辑熔断回归、乐观锁冲突、路径与父目录边界测试，以及 Android WebView 键盘变化时的 `visualViewport` 高度适配。
+- PR #43 已合入：Provider / Magpie 上游异常响应凭据脱敏，以及 IPv6 ULA、link-local、IPv4-mapped loopback、混合公网/私网 DNS 答案和全球 IPv6 pinning 回归测试。
+- PR #32、#33、#34、#36、#37 仍为此前已合入的 P0 修复。签名发布实现已经进入主线，但正式 tag Release 仍依赖仓库 Actions Secrets 和真实设备升级 / 数据迁移验收。
+
+### 16.2 P0 Issue 的真实剩余工作
+
+| Issue | 当前状态 | 已具备的代码 / 自动化证据 | 仍未完成的人工验收 |
+|---|---|---|---|
+| #24 Release alignment | Open | 持久化 Release signing 流程已合入；主线 CI / 双 ABI Debug 构建通过 | 完成 P0 设备、真实 Provider、Magpie 和恢复验收后，再提升版本号、构建签名 Release、校验清单并创建新 tag；不得移动 v0.1.2 |
+| #25 Android device smoke | Open | 双 ABI APK 可构建，WebView / Keystore / 主题已有自动化和静态检查 | 在真实 Android 设备记录安装、启动、Chat、Workspace、主题、文件访问、升级 / 迁移结果 |
+| #26 Provider E2E | Open | Provider registry、DNS pinning、TLS / SSE、密钥不回显和异常脱敏有测试 | 使用用户合法控制的真实 HTTPS Provider 与真实模型完成请求，并记录脱敏证据 |
+| #27 Magpie / Qoder E2E | Open | 固定 loopback 检测、模型同步路径已有实现和测试边界 | 在目标设备启动 Magpie、使用官方 Qoder Auth 插件授权并完成真实模型对话 |
+| #28 Backup / restore drill | Open | PR #36 的数据库 / 预设 / Provider 元数据备份工具和隔离恢复测试已合入；另有 PR #40 跟进自定义数据库文件名映射 | 在实际部署路径完成独立备份、停止服务、恢复到新目录、以相同环境变量启动并核验数据；不要对真实目录做破坏性测试 |
+| #29 Security regression | Open | PR #43 的错误脱敏和 IPv6 DNS 回归已合入；原有认证、SSRF、代理 MIME / 体积限制测试仍在主线 | 逐项复核 Token 权限、四服务认证覆盖、Origin / Sec-Fetch-Site、Android Keystore 桥接、代理出口与日志；记录任何风险接受决策 |
+| #30 Workspace regression | Open | PR #42 的冲突、路径、审批、拒绝规则、自动熔断和移动视口自动化已合入 | 在真实 Android WebView 检查键盘遮挡、窄屏导航、弹窗和完整文件 / AI 编辑工作流 |
+| #31 Android signing continuity | Closed（维护端状态） | PR #37 的持久签名配置、Secrets 驱动 tag Release、双 ABI 证书一致性校验和 fail-closed 行为已合入 | 关闭 Issue 不代表当前已产出经过设备验证的签名升级包；首次正式 Release 前仍必须确认四项 Secrets 已安全配置，并验证实际签名证书及设备升级迁移 |
+
+### 16.3 当前跟进 PR
+
+- [PR #40](https://github.com/2719126468-ship-it/dsh017/pull/40)（Draft / Open）：补充恢复时的 `--db-name`，避免自定义 `DSH017_DB_PATH` 文件名与恢复目标不一致。以当前 PR head 的 Python 3.10 / 3.11 / 3.12 CI 为通过；双 ABI Android CI 仍以该 PR 最新 workflow 状态为准。
+- #42、#43 已合入主线，不再作为待合并分支管理。
+- 先完成 PR #40 审核，再以真实运行目录完成 #28 恢复演练；不要把合成数据 CI 误写为生产数据恢复证明。
+
+### 16.4 发布门槛重申
+
+当前不满足发布 v0.1.3 的全部门槛。不得因为主线 CI 和 APK packaging 通过就提升版本号或打 tag。发布前还需完成 #24–#30 中对目标设备、真实 Provider、Magpie、恢复与安全边界的必要验收，并验证持久签名 Secrets 和签名升级路径。用户旧版 APK 仍应保留，直到数据迁移路径经过真实设备验证。
