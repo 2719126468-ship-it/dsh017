@@ -50,7 +50,7 @@ Stop the target DSH-017 services before using the restored directory. First choo
       --data-dir "$HOME/dsh017-recovery/data" \
       --preset-dir "$HOME/dsh017-recovery/presets"
 
-The restore command verifies every manifest hash, rejects duplicate/path-traversal/symlink members, checks SQLite database integrity, validates provider metadata and UTF-8 presets, and refuses non-empty destinations. It stages and validates all archive files before creating destination files. It does not overwrite an existing database or merge directories.
+The restore command verifies every manifest hash, rejects duplicate/path-traversal/symlink members, checks SQLite database integrity, validates provider metadata and UTF-8 presets, and refuses non-empty destinations. It stages and validates all archive files before creating destination files. It does not overwrite an existing database or merge directories. The database uses the stable internal archive name `database.sqlite3`, then is written to the app's default database path `bili_data.db` inside the restored data directory so the documented `DSH017_DB_PATH` points to the recovered database.
 
 To run the recovered copy, point the service to the restored paths:
 
