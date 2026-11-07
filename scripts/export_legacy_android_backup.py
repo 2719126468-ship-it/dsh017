@@ -120,7 +120,7 @@ def export_legacy(args) -> Path:
         raise LegacyExportError("ADB executable was not found; install Android platform-tools")
     serial = _adb_serial(adb, args.serial)
     package = args.package
-    if package not in ("com.dsh017.android.debug", "com.dsh017.android"):
+    if package != "com.dsh017.android.debug":
         raise LegacyExportError("unsupported DSH017 package ID")
     command = [
         adb, "-s", serial, "exec-out", "run-as", package,
