@@ -186,9 +186,22 @@ def _restore(args) -> tuple[Path, Path]:
         raise BackupError("backup archive not found or is not a regular file")
     data_resolved = data_dir.resolve()
     preset_resolved = preset_dir.resolve()
-    if data_resolved == preset_resolved or data_resolved in preset_resolved.parents or preset_resolved in data_resolved.parents:
-        raise BackupError("data and preset destinations must be separate directories")
-    _check_empty_destination(data_dir, "data")
+    android_nested_presets = (
+        preset_resolved.parent == data_resolved and preset_resolved.name == "presets"
+    )
+    if (
+        data_resolved == preset_resolved
+        or preset_resolved in data_resolved.parents
+        or (data_resolved in preset_resolved.parents and not android_nested_presets)
+    ):
+        raise BackupError("preset destination must be separate, except for the Android data-dir/presets layout")
+    if android_nested_presets:
+        if data_dir.is_symlink() or (data_dir.exists() and (
+            not data_dir.is_dir() or any(item != preset_dir for item in data_dir.iterdir())
+        )):
+            raise BackupError("data destination must be empty except for the dedicated presets directory")
+    else:
+        _check_empty_destination(data_dir, "data")
     _check_empty_destination(preset_dir, "preset")
 
     with tempfile.TemporaryDirectory(prefix="dsh017-restore-") as temp_name:
