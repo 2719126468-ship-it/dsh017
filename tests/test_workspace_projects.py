@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import tempfile
 import unittest
 import uuid
@@ -7,6 +8,8 @@ os.environ.setdefault("DSH017_DATA_DIR", tempfile.mkdtemp(prefix="dsh017-workspa
 
 from flask import Flask
 from app.workspace_routes import workspace_bp
+import app.workspace_routes as workspace_routes
+from unittest.mock import patch
 
 
 class WorkspaceProjectApiTests(unittest.TestCase):
@@ -146,6 +149,115 @@ class WorkspaceProjectApiTests(unittest.TestCase):
         })
         self.assertEqual(oversized_old_edit.status_code, 400)
 
+    def test_stale_file_save_returns_conflict_without_overwriting_latest_content(self):
+        project = self.client.post("/api/workspace/projects", json={
+            "name": "Optimistic lock " + uuid.uuid4().hex[:8],
+        }).get_json()["item"]
+        self.project_id = project["id"]
+        file_id = self.client.post("/api/workspace/files", json={
+            "name": "state.md", "project_id": self.project_id,
+        }).get_json()["id"]
+        self.file_ids.append(file_id)
+        first = self.client.put("/api/workspace/files/%d" % file_id, json={
+            "content": "newer committed content", "base_version": 1,
+        })
+        self.assertEqual(first.status_code, 200)
+        stale = self.client.put("/api/workspace/files/%d" % file_id, json={
+            "content": "stale content must not win", "base_version": 1,
+        })
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.get_json()["current_version"], 2)
+        latest = self.client.get("/api/workspace/files/%d" % file_id)
+        self.assertEqual(latest.status_code, 200)
+        self.assertEqual(latest.get_json()["content"], "newer committed content")
+        self.assertEqual(latest.get_json()["version"], 2)
+
+    def test_file_creation_rejects_unsafe_names_duplicate_siblings_and_foreign_parent(self):
+        first = self.client.post("/api/workspace/projects", json={
+            "name": "Boundary project " + uuid.uuid4().hex[:8],
+        }).get_json()["item"]
+        self.project_id = first["id"]
+        for invalid_name in ("", "../escape", "folder/file", "folder\\\\file", "..", "."):
+            with self.subTest(name=invalid_name):
+                response = self.client.post("/api/workspace/files", json={
+                    "name": invalid_name, "project_id": self.project_id,
+                })
+                self.assertEqual(response.status_code, 400)
+        folder = self.client.post("/api/workspace/files", json={
+            "name": "src", "project_id": self.project_id, "kind": "directory",
+        })
+        self.assertEqual(folder.status_code, 201)
+        folder_id = folder.get_json()["id"]
+        self.file_ids.append(folder_id)
+        bad_parent = self.client.post("/api/workspace/files", json={
+            "name": "bad-parent.md", "project_id": self.project_id, "parent_id": True,
+        })
+        self.assertEqual(bad_parent.status_code, 400)
+        cross_project = self.client.post("/api/workspace/projects", json={
+            "name": "Other project " + uuid.uuid4().hex[:8],
+        }).get_json()["item"]
+        other_id = cross_project["id"]
+        foreign_parent = self.client.post("/api/workspace/files", json={
+            "name": "foreign.md", "project_id": other_id, "parent_id": folder_id,
+        })
+        self.assertEqual(foreign_parent.status_code, 400)
+        self.client.delete("/api/workspace/projects/" + other_id)
+        created = self.client.post("/api/workspace/files", json={
+            "name": "duplicate.md", "project_id": self.project_id,
+        })
+        self.assertEqual(created.status_code, 201)
+        file_id = created.get_json()["id"]
+        self.file_ids.append(file_id)
+        duplicate = self.client.post("/api/workspace/files", json={
+            "name": "duplicate.md", "project_id": self.project_id,
+        })
+        self.assertEqual(duplicate.status_code, 409)
+
+    def test_workspace_rules_deny_wins_and_unmatched_rules_default_to_ask(self):
+        with tempfile.TemporaryDirectory(prefix="dsh017-workspace-rule-test-") as temp:
+            database = os.path.join(temp, "rules.sqlite3")
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "CREATE TABLE workspace_rules (file_pattern TEXT, operation TEXT, action TEXT)"
+                )
+                connection.executemany(
+                    "INSERT INTO workspace_rules VALUES(?,?,?)",
+                    [("guarded.md", "edit", "allow"), ("guarded.md", "edit", "deny")],
+                )
+            def open_rules_db():
+                connection = sqlite3.connect(database)
+                connection.row_factory = sqlite3.Row
+                return connection
+            with patch.object(workspace_routes, "_db_conn", side_effect=open_rules_db):
+                self.assertEqual(workspace_routes._ws_rule_lookup("guarded.md", "edit"), "deny")
+                self.assertEqual(workspace_routes._ws_rule_lookup("unmatched-" + uuid.uuid4().hex + ".md", "edit"), "ask")
+
+    def test_auto_edit_circuit_breaker_downgrades_after_three_blocks(self):
+        project = self.client.post("/api/workspace/projects", json={
+            "name": "Circuit breaker " + uuid.uuid4().hex[:8],
+        }).get_json()["item"]
+        self.project_id = project["id"]
+        file_id = self.client.post("/api/workspace/files", json={
+            "name": "guarded-auto.md", "project_id": self.project_id,
+        }).get_json()["id"]
+        self.file_ids.append(file_id)
+        with patch.object(workspace_routes, "_AUTO_BLOCK_STREAK", 0), patch.object(workspace_routes, "_AUTO_DOWNGRADED", False), patch.object(workspace_routes, "_ws_rule_lookup", return_value="ask"):
+            for _ in range(3):
+                response = self.client.post("/api/workspace/apply_edit", json={
+                    "file_id": file_id, "base_version": 1,
+                    "old_str": "", "new_str": "must stay unchanged", "mode": "auto",
+                })
+                self.assertEqual(response.get_json()["reason"], "rule_ask")
+            status = self.client.get("/api/workspace/auto_status").get_json()
+            self.assertEqual(status["streak"], 3)
+            self.assertTrue(status["downgraded"])
+            with patch.object(workspace_routes, "_ws_rule_lookup", return_value="allow"):
+                blocked = self.client.post("/api/workspace/apply_edit", json={
+                    "file_id": file_id, "base_version": 1,
+                    "old_str": "", "new_str": "must stay unchanged", "mode": "auto",
+                })
+            self.assertEqual(blocked.get_json()["reason"], "auto_downgraded")
+            self.assertEqual(self.client.get("/api/workspace/files/%d" % file_id).get_json()["content"], "")
     def test_default_workspace_cannot_be_deleted(self):
         response = self.client.delete("/api/workspace/projects/default")
         self.assertEqual(response.status_code, 400)
