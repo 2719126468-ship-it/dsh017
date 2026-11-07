@@ -133,6 +133,31 @@ def wait_ready(timeout_seconds=45):
     return False
 
 
+
+def create_backup_archive(output_dir):
+    """Create an application-data archive in a caller-provided private directory."""
+    from argparse import Namespace
+    from data_backup import _backup
+    return str(_backup(Namespace(
+        data_dir=os.environ.get("DSH017_DATA_DIR"),
+        db_path=os.environ.get("DSH017_DB_PATH"),
+        preset_dir=os.environ.get("DSH017_PRESET_DIR"),
+        backup_dir=output_dir,
+    )))
+
+
+def restore_backup_archive(archive_path, data_dir, preset_dir):
+    """Validate and restore a user-selected archive before services are started."""
+    from argparse import Namespace
+    from data_backup import _restore
+    restored_data, restored_presets = _restore(Namespace(
+        archive=archive_path,
+        data_dir=data_dir,
+        preset_dir=preset_dir,
+        db_name="bili_data.db",
+    ))
+    return {"data_dir": str(restored_data), "preset_dir": str(restored_presets)}
+
 def startup_errors():
     return dict(_errors)
 
