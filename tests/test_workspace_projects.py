@@ -246,7 +246,7 @@ class WorkspaceProjectApiTests(unittest.TestCase):
             "file_id": file_id, "base_version": 2,
             "old_str": "alpha", "new_str": "also blocked",
         })
-        self.assertEqual(manual_denied.status_code, 200)
+        self.assertEqual(manual_denied.status_code, 403)
         self.assertEqual(manual_denied.get_json()["code"], 403)
 
         deny_id = next(
