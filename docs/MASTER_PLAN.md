@@ -59,7 +59,7 @@ DSH-017 是一个以个人为中心、以 AI 为智能核心、以 Workspace 为
 - **Android：** [main push run #42363124808](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363124808) 成功；`Build ARMv7-32bit` 与 `Build ARM64-64bit` 两个 Job 均成功，均完成 APK stage 和 workflow artifact 上传。该次 main push 的 `Publish GitHub Release` Job 按工作流条件跳过，这是预期行为；正式 Release 只在推送 `v*` tag 时创建。
 - **当前 main workflow artifacts：** [Android run artifacts](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363124808)。ARMv7 artifact SHA256：`fea0ef7fd4ec22c7774b010f14786dcbed4ea5c63fca8bcce82990d3b599622c`；ARM64 artifact SHA256：`b4b9429bf18d61da42f52ea206a1e484494c9a25703a141edcbc1323ab52d427`。Actions artifact 有保留期限，不能代替长期 Release 资产。
 - **历史 PR 检查：** PR #23 的最终 PR 检查成功并已合并；早期中间提交曾因测试 Mock 仍使用旧 `client.s.post` 接口、以及模拟 SSE 响应缺少 `status` 属性而失败。后续提交同步更新测试并补齐模拟对象，最终 PR 检查和 main push 检查通过。不要把这些早期 PR 失败误报为当前 main 失败。
-- **Issues / PR：** 本轮登记前没有开放 Issue 或 PR；近期 PR #20–#23 均已合并。现已创建以下七个 P0 跟踪项，见第 7 节。
+- **Issues / PR：** 本轮登记前没有开放 Issue 或 PR；近期 PR #20–#23 均已合并。现已创建以下八个 P0 跟踪项，见第 7 节。
 
 ### Release 基线差异
 
@@ -79,6 +79,55 @@ DSH-017 是一个以个人为中心、以 AI 为智能核心、以 Workspace 为
 - 四服务认证、Keystore、日志脱敏和网络出口策略的集中安全回归。
 
 以上均已登记为开放 P0 Issues，不把构建成功当作实机验收完成。
+
+---
+
+## 0.2 执行状态增补（2026-11-07，P0 修复合并后）
+
+本节是对 0.1 初始快照的后续增补。当前主分支已推进到 `285025b7481d6e9ab7607de690ed858ea8576022`；不要再把 0.1 节的 `07fa91c` 当作当前 HEAD。
+
+### 已合入主分支的稳定性与安全修复
+
+| PR | 合并提交 | 内容 | 合并前验证 |
+|---|---|---|---|
+| [#32](https://github.com/2719126468-ship-it/dsh017/pull/32) | `74b74a9` | Workspace AI 编辑拒绝目录目标；写入前再次核验；限制 old/new patch 均不超过 1,000,000 字符 | [CI #42364195249](https://github.com/2719126468-ship-it/dsh017/actions/runs/42364195249) 成功；[Android #42364195317](https://github.com/2719126468-ship-it/dsh017/actions/runs/42364195317) 双 ABI 成功 |
+| [#33](https://github.com/2719126468-ship-it/dsh017/pull/33) | `f2bd2b0` | Provider `enabled` 字段严格要求布尔类型，避免字符串 `false` 被误判为启用 | [CI #42363632348](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363632348) 成功；[Android #42363632343](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363632343) 双 ABI 成功 |
+| [#34](https://github.com/2719126468-ship-it/dsh017/pull/34) | `c2b53cf` | Android Provider Key bridge 限制到精确的 loopback `/providers` 设置路由；更新发布与校验和文档 | [CI #42363386602](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363386602) 成功；[Android #42363386530](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363386530) 双 ABI 成功 |
+| [#36](https://github.com/2719126468-ship-it/dsh017/pull/36) | `54eea25` | 新增隔离 SQLite / 预设备份恢复工具、版本化 SHA-256 manifest、路径与成员校验、拒绝覆盖非空目标；恢复数据库映射到应用默认 `bili_data.db` | [CI #42364482493](https://github.com/2719126468-ship-it/dsh017/actions/runs/42364482493) 成功；[Android #42364482418](https://github.com/2719126468-ship-it/dsh017/actions/runs/42364482418) 双 ABI 成功 |
+| [#37](https://github.com/2719126468-ship-it/dsh017/pull/37) | `285025b` | 持久化 Release 签名；Debug CI 与 Release 发布分离；缺少 Keystore Secrets 时 fail closed；发布前核验 ARMv7 / ARM64 signer 证书相同 | [CI #42364426365](https://github.com/2719126468-ship-it/dsh017/actions/runs/42364426365) 成功；[Android #42364426364](https://github.com/2719126468-ship-it/dsh017/actions/runs/42364426364) 双 ABI Debug 构建成功；Release job 按 PR 事件跳过 |
+
+PR #35 是旧签名分支，已关闭且未合并；由针对主线重建的 PR #37 替代。PR #32、#33、#34、#36、#37 已合入。上述 Android 结果均为 PR 分支的 Debug CI 构建，不等同于正式 Release 签名构建或设备安装验收。
+
+### Debug APK 签名实测
+
+对两个独立 Actions run 的 ARMv7 / ARM64 Debug APK，提取 APK v2 Signing Block 的 signer X.509 证书并用 OpenSSL 计算 SHA-256。四个指纹全部不同，确认旧临时 Debug signer 既不保证跨 run 稳定，也不保证同 run 的双 ABI 一致：
+
+| Actions run | ABI | Artifact ID | Signer certificate SHA-256 |
+|---|---|---:|---|
+| [42363124808](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363124808) | ARMv7 | `13570418029` | `c10371e2165ca8c55adcef75cc99b79f933e23bd39277fa57ae879fe11f17366` |
+| [42363124808](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363124808) | ARM64 | `13570144863` | `2d4ac3e496c81702b7ae65bb9acd50897244ff179af311004629fb26bc7daba2` |
+| [42363251939](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363251939) | ARMv7 | `13570825849` | `db7971dd88d8d03de836befe081af9d8f9f810d8e4f840808d912d3118f6d7ae` |
+| [42363251939](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363251939) | ARM64 | `13569903751` | `2ea0d3175a286763ec11a0db5c4b3d71665e8918f5ea0cfe68f9e535a74e61e3` |
+
+该测试是 APK v2 signer 证书提取与 SHA-256 比对，不应被表述为完整的 Android 安装 / 更新验证。#37 已加入正式 Release 统一签名流程，但实际 GitHub Actions secrets、tag Release 构建、Release-to-Release 覆盖安装仍待完成。
+
+### 备份恢复能力现状
+
+PR #36 新增 `scripts/data_backup.py` 与 `docs/BACKUP_RESTORE.md`。备份使用 SQLite online backup API；manifest 包含版本、文件大小和 SHA-256；恢复检查路径 / tar member 类型、重复路径、大小、hash、SQLite integrity、Provider metadata 与 preset UTF-8，并且拒绝写入非空目标。Provider API Key、auth/admin Token、运行时 secrets 和 Android Keystore 项目不导出。
+
+自动化测试使用合成数据，覆盖聊天、Workspace 文件 / 版本 / 规则、收藏、观看进度、搜索历史、预设、Provider metadata、损坏归档拒绝和非空目标保护。该证据不能代替部署环境的人工恢复演练，也不能证明 Android app-private storage 能被该 CLI 自动导出。
+
+### 当前发布与 P0 边界
+
+- 公开最新 Release 仍是 `v0.1.2`；没有创建或覆盖 `v0.1.3` tag。Gradle 版本仍需按发布计划从 `versionName 0.1.2` / `versionCode 3` 递增。
+- #24–#31 八个 P0 issue 仍按各自验收标准跟踪；PR 合并不自动关闭依赖实机 / 真实凭据的 issue。
+- #28：隔离备份 / 恢复工具和合成数据测试已合入；真实运行目录的人工恢复演练、服务停启与关键记录核验仍未完成。
+- #31：持久化 Release 签名代码已合入；四项 repository Actions secrets 是否配置、正式双 ABI Release 是否用同证书、升级安装与旧 Debug 包数据迁移仍待实测。
+- #25：Mate 20 Pro / Android 10 实机安装、WebView、Chat、Workspace、主题、统计和数据升级测试仍待完成。
+- #26 / #27：真实 OpenAI-compatible Provider 与 Magpie / Qoder 账号授权后的集成测试仍待完成。
+- #29 / #30：仍需完成安全边界集中回归与 Workspace 完整权限 / 移动端验证。
+
+不得因为自动化通过而提前关闭 #24–#31，也不得在签名和数据迁移验收前创建下一版公开 Release。
 
 ---
 
@@ -417,7 +466,7 @@ Workspace 是项目数据和修改的权威载体。功能优先级：
 
 ## 7. GitHub Issues 任务树
 
-以下是项目执行 Backlog。v0.1.2 稳定化 P0 已转为实际 GitHub Issues #24–#30；v0.2.0 及后续 P1/P2 项仍是待排期建议。Issue 状态以 GitHub 当前状态为准。
+以下是项目执行 Backlog。v0.1.2 稳定化 P0 已转为实际 GitHub Issues #24–#31；v0.2.0 及后续 P1/P2 项仍是待排期建议。Issue 状态以 GitHub 当前状态为准。
 
 ### EPIC P0 — v0.1.2 稳定化
 
@@ -619,7 +668,7 @@ Workspace 是项目数据和修改的权威载体。功能优先级：
 | TD-13 | 局域网 HTTP 凭据保护依赖可信网络 | README 明确提示 HTTP Basic / Bearer 在普通 HTTP 网络中不加密 | 高 | 默认建议 VPN / HTTPS；评估安全反向代理配置 |
 | TD-14 | 严格 CSP 尚未启用 | README 说明未引入会破坏内联脚本的严格 CSP | 中 | 先收敛内联脚本和 nonce/hash 策略，再逐页启用 |
 | TD-15 | 模块 / 文档边界需持续同步 | 新增 Provider、Workspace 和 Android 能力后，目录与接口持续演进 | 低中 | 每个跨模块 PR 更新架构图、README 和变更记录 |
-| TD-16 | Debug APK 的签名连续性尚未证明 | CI 使用 assemble*Debug，未配置持久化 signingConfig；不同临时 Runner 的证书是否一致仍需实测 | 高 | 比较多次构建证书指纹；设计 GitHub Secrets 驱动的稳定发布签名；验证覆盖升级与数据保留 |
+| TD-16 | Debug / Release APK 签名迁移仍未完成端到端验证 | 已实测四个 Debug APK 的签名证书指纹全部不同；PR #37 已合入 GitHub Secrets 驱动的持久化 Release 签名和 fail-closed 发布流程，但尚未验证正式签名构建与设备升级 | 高 | 安全配置签名 Secrets；使用专用测试 tag 生成双 ABI Release；检查同证书；在设备上验证 Release-to-Release 升级和旧 Debug 包数据迁移 |
 
 技术债处理原则：先补测试和可观测性，再重构；先解决数据、安全和发布风险，再做代码美化。不得把“重写全部模块”作为默认偿还技术债的方法。
 
