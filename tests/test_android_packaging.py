@@ -78,7 +78,7 @@ class AndroidPackagingContractTests(unittest.TestCase):
         self.assertIn("signingConfig signingConfigs.release", gradle)
         self.assertIn("assembleArm32Release", workflow)
         self.assertIn("assembleArm64Release", workflow)
-        self.assertIn("apksigner verify --print-certs", workflow)
+        self.assertIn('/build-tools/35.0.0/apksigner" verify --print-certs', workflow)
         self.assertIn("ARM32_CERT", workflow)
         self.assertIn("ARM64_CERT", workflow)
         self.assertIn("SHA256SUMS.txt", workflow)
