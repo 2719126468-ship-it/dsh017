@@ -54,7 +54,11 @@ class AndroidPackagingContractTests(unittest.TestCase):
         self.assertIn("ProviderKeyBridge", activity)
         self.assertIn("provider_keys_json", launcher)
         self.assertIn("set_runtime_provider_secret", launcher)
-        self.assertIn('page.startsWith("http://127.0.0.1:8092/providers")', activity)
+        self.assertIn("if (!isProviderSettingsPage()) return false;", activity)
+        self.assertIn('"127.0.0.1".equalsIgnoreCase(uri.getHost())', activity)
+        self.assertIn('"/providers".equals(uri.getPath())', activity)
+        self.assertIn("uri.getPort() == 8092", activity)
+        self.assertIn("uri.getUserInfo() == null", activity)
 
     def test_ci_builds_both_installable_variants(self):
         workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
