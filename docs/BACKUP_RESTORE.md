@@ -71,6 +71,6 @@ Use those exact values for startup and shutdown. Verify chats, Workspace project
 
 ## Isolated regression drill
 
-    python3 -m unittest tests.test_backup_restore -v
+    python3 -m unittest discover -s tests -p 'test_backup_restore.py' -v
 
 The tests create synthetic records in a temporary database, archive and restore them into fresh directories, check representative table data and SQLite integrity, confirm that API keys and auth tokens are excluded, corrupt an archive to prove rejection, and verify that a non-empty destination is never overwritten.
