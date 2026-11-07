@@ -245,7 +245,7 @@ def api_ws_confirm_edit():
         isinstance(file_id, bool) or not isinstance(file_id, int) or file_id <= 0
         or isinstance(base_version, bool) or not isinstance(base_version, int) or base_version < 1
         or not isinstance(old_str, str) or not isinstance(new_str, str)
-        or len(new_str) > 1_000_000
+        or len(old_str) > 1_000_000 or len(new_str) > 1_000_000
     ):
         return jsonify({"code": -1, "message": "文件 ID、版本或编辑内容格式无效"}), 400
 
