@@ -120,7 +120,7 @@ export DSH017_NOVEL_LEGACY_HTTP_PROXIES=1
 操作步骤、路径环境变量、恢复校验与失败回滚见 [备份与恢复指南](docs/BACKUP_RESTORE.md)。在隔离临时目录执行自动演练：
 
 ```bash
-python3 -m unittest tests.test_backup_restore -v
+python3 -m unittest discover -s tests -p 'test_backup_restore.py' -v
 ```
 
 ### 数据目录与测试
