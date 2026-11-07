@@ -162,6 +162,27 @@ PR #41 是 Workspace 保护逻辑的较早重复草稿，已在 PR #42 合并后
 
 ---
 
+## 0.4 执行状态增补（2026-11-07，Provider 本地 E2E 合入）
+
+最新功能主线包含 PR #45 合并提交 `c3356d1709f44a6d60cc03daed7dad9a2e2ae46a`。它新增本机 loopback OpenAI-compatible Chat E2E：实际执行 Flask `/api/chat`、Provider resolve、DNS-pinned HTTP transport、Chat Completions payload 与 SSE 解析；验证请求路径、Bearer header、`stream: true`、内容分块和 `[DONE]`，并证明未被 allow-list 接受的模型不会发出请求。测试使用合成凭据与 `127.0.0.1` 服务，不调用真实供应商。
+
+PR #45 的 Python 3.10 / 3.11 / 3.12 CI [run #42365818465](https://github.com/2719126468-ship-it/dsh017/actions/runs/42365818465) 全部通过；Android [run #42365818534](https://github.com/2719126468-ship-it/dsh017/actions/runs/42365818534) 的 ARMv7 / ARM64 Debug packaging 全部通过。正式 Release jobs 在 PR 事件中按设计跳过。
+
+### 0.4.1 Legacy Debug 到 Release 的包名迁移
+
+已从 `v0.1.2` tag 的 Gradle 与 Android workflow 交叉确认：公开 APK 使用 `assemble*Debug`，`applicationId` 为 `com.dsh017.android` 且 Debug suffix 为 `.debug`，因此安装包名为 `com.dsh017.android.debug`。新版正式 Release 使用无 suffix 的 `com.dsh017.android`。这两个应用不是 Android 的同一 package，不能做原地覆盖更新，也不会共享 app-private SQLite / presets / SharedPreferences / Android Keystore namespace。
+
+因此将迁移目标单独登记为 [P0 #46](https://github.com/2719126468-ship-it/dsh017/issues/46)：旧包通过 Android SAF 用户授权导出便携备份，新 Release 首次启动前验证并导入到独立私有目录；导出数据不含 API keys、auth/admin tokens 或 Android Keystore 密钥，用户在新包中重新输入凭据。旧包必须保留，直至真实 Android 10 设备验收成功。#24 下一版 Release 被 #46 阻断。
+
+### 0.4.2 调整后的签名 / 发布任务边界
+
+- [#31](https://github.com/2719126468-ship-it/dsh017/issues/31) 已重新打开：只跟踪持久 Release signer、Secrets 配置状态、双 ABI 统一 signer 和连续正式 Release 的覆盖升级；不再把 Debug-to-Release 当作普通包升级。
+- [#46](https://github.com/2719126468-ship-it/dsh017/issues/46) 跟踪从已发布 Debug package 向 Release package 的显式导出 / 导入迁移。
+- [#26](https://github.com/2719126468-ship-it/dsh017/issues/26) 的本机 Provider E2E 已具备；真实 HTTPS 上游 / 用户模型仍未通过实际凭据验收。
+- 公开 Release 仍是 `v0.1.2`。未配置并验证真实签名 Secrets、#46 的 Android 实机迁移、#28 的真实恢复演练、#25/#30 实机体验及 #26/#27 真实供应商授权前，不发布 `v0.1.3`。
+
+---
+
 ## 1. 愿景、使命与产品边界
 
 ### 1.1 Vision
