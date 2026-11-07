@@ -299,11 +299,28 @@ public class MainActivity extends Activity {
         }
     }
 
+    private boolean isProviderSettingsPage() {
+        if (webView == null) return false;
+        String page = webView.getUrl();
+        if (page == null) return false;
+        try {
+            Uri uri = Uri.parse(page);
+            return "http".equalsIgnoreCase(uri.getScheme())
+                    && "127.0.0.1".equalsIgnoreCase(uri.getHost())
+                    && uri.getPort() == 8092
+                    && "/providers".equals(uri.getPath())
+                    && uri.getUserInfo() == null
+                    && uri.getQuery() == null
+                    && uri.getFragment() == null;
+        } catch (Exception error) {
+            return false;
+        }
+    }
+
     private final class ProviderKeyBridge {
         @JavascriptInterface
         public boolean save(String providerId, String apiKey) {
-            String page = webView == null ? "" : String.valueOf(webView.getUrl());
-            if (!page.startsWith("http://127.0.0.1:8092/providers")) return false;
+            if (!isProviderSettingsPage()) return false;
             if (providerId == null || apiKey == null || apiKey.length() > 4096) return false;
             if (!apiKeyStore.saveProviderKey(providerId, apiKey)) return false;
             backendExecutor.execute(() -> {
