@@ -255,7 +255,10 @@ def _restore(args) -> tuple[Path, Path]:
             copied = []
             try:
                 for item in staged_data.iterdir():
-                    target = data_dir / item.name
+                    # The archive uses a stable internal filename, but the app's
+                    # default database contract is data/bili_data.db.
+                    target_name = "bili_data.db" if item.name == "database.sqlite3" else item.name
+                    target = data_dir / target_name
                     with item.open("rb") as source, target.open("xb") as output:
                         shutil.copyfileobj(source, output)
                     os.chmod(target, 0o600)
