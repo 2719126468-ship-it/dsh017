@@ -163,6 +163,33 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
                 )
                 self.assertFalse(target_data.exists())
                 self.assertFalse(target_presets.exists())
+    def test_restore_supports_android_data_dir_with_nested_presets_directory(self):
+        archive_path = self.create_backup()
+        restored_data = self.root / "android-private-data"
+        restored_presets = restored_data / "presets"
+        self.run_tool(
+            "restore", "--archive", archive_path, "--data-dir",
+            restored_data, "--preset-dir", restored_presets,
+        )
+        self.assertTrue((restored_data / "bili_data.db").is_file())
+        self.assertEqual((restored_presets / "Writing.txt").read_text(encoding="utf-8"), "private writing preset")
+        with sqlite3.connect(restored_data / "bili_data.db") as connection:
+            self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            self.assertEqual(connection.execute("SELECT title FROM chat_conversations WHERE id='chat-1'").fetchone()[0], "backup chat")
+
+    def test_android_nested_restore_refuses_unrelated_existing_data(self):
+        archive_path = self.create_backup()
+        restored_data = self.root / "android-data-with-existing-file"
+        restored_data.mkdir()
+        sentinel = restored_data / "keep.txt"
+        sentinel.write_text("untouched", encoding="utf-8")
+        restored_presets = restored_data / "presets"
+        self.run_tool(
+            "restore", "--archive", archive_path, "--data-dir",
+            restored_data, "--preset-dir", restored_presets, expected=2,
+        )
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "untouched")
+        self.assertFalse(restored_presets.exists())
     def test_corrupt_archive_is_rejected_without_creating_destination(self):
         archive_path = self.create_backup()
         corrupt = self.root / "corrupt.tar.gz"
