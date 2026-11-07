@@ -1,4 +1,7 @@
+import json
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest.mock import call, patch
 
 from flask import Flask
@@ -60,6 +63,45 @@ class MagpieGatewayTests(unittest.TestCase):
             call("/v1/models", include_app_key=True),
         ])
 
+    def test_discovery_uses_real_loopback_http_and_app_key_header(self):
+        observed = []
+        synthetic_key = "synthetic-magpie-e2e-key"
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(handler_self):
+                observed.append((handler_self.path, handler_self.headers.get("Authorization")))
+                if handler_self.path == "/api/hello":
+                    payload = {"name": "magpie", "version": "loopback-e2e"}
+                elif handler_self.path == "/v1/models":
+                    payload = {"data": [{"id": "codex/gpt-5.1"}, {"id": "qwen3-coder"}]}
+                else:
+                    handler_self.send_error(404)
+                    return
+                body = json.dumps(payload).encode("utf-8")
+                handler_self.send_response(200)
+                handler_self.send_header("Content-Type", "application/json")
+                handler_self.send_header("Content-Length", str(len(body)))
+                handler_self.end_headers()
+                handler_self.wfile.write(body)
+            def log_message(self, *_args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with patch("app.providers._MAGPIE_PORT", server.server_port), \\
+                 patch("app.providers._MAGPIE_APP_KEY", synthetic_key):
+                discovered = discover_local_magpie()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(discovered["gateway_version"], "loopback-e2e")
+        self.assertEqual(discovered["models"], ["codex/gpt-5.1", "qwen3-coder"])
+        self.assertEqual(observed[0], ("/api/hello", None))
+        self.assertEqual(observed[1], ("/v1/models", "Bearer " + synthetic_key))
+        self.assertNotIn(synthetic_key, json.dumps(discovered))
     def test_discovery_rejects_a_different_local_service(self):
         with patch("app.providers._magpie_get_json", return_value={"name": "other"}):
             with self.assertRaisesRegex(RuntimeError, "不是 Magpie"):
