@@ -289,6 +289,68 @@ class WorkspaceProjectApiTests(unittest.TestCase):
         self.assertEqual(stored["content"], "")
         self.assertEqual(stored["version"], 1)
 
+    def test_stale_file_save_returns_conflict_without_overwriting_latest_content(self):
+        project = self.client.post("/api/workspace/projects", json={
+            "name": "Optimistic lock " + uuid.uuid4().hex[:8],
+        }).get_json()["item"]
+        self.project_id = project["id"]
+        file_id = self.client.post("/api/workspace/files", json={
+            "name": "state.md", "project_id": self.project_id,
+        }).get_json()["id"]
+        self.file_ids.append(file_id)
+        first = self.client.put("/api/workspace/files/%d" % file_id, json={
+            "content": "newer committed content", "base_version": 1,
+        })
+        self.assertEqual(first.status_code, 200)
+        stale = self.client.put("/api/workspace/files/%d" % file_id, json={
+            "content": "stale content must not win", "base_version": 1,
+        })
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.get_json()["current_version"], 2)
+        latest = self.client.get("/api/workspace/files/%d" % file_id)
+        self.assertEqual(latest.status_code, 200)
+        self.assertEqual(latest.get_json()["content"], "newer committed content")
+        self.assertEqual(latest.get_json()["version"], 2)
+
+    def test_file_creation_rejects_unsafe_names_duplicate_siblings_and_foreign_parent(self):
+        first = self.client.post("/api/workspace/projects", json={
+            "name": "Boundary project " + uuid.uuid4().hex[:8],
+        }).get_json()["item"]
+        self.project_id = first["id"]
+        for invalid_name in ("", "../escape", "folder/file", "folder\\\\file", "..", "."):
+            with self.subTest(name=invalid_name):
+                response = self.client.post("/api/workspace/files", json={
+                    "name": invalid_name, "project_id": self.project_id,
+                })
+                self.assertEqual(response.status_code, 400)
+        folder = self.client.post("/api/workspace/files", json={
+            "name": "src", "project_id": self.project_id, "kind": "directory",
+        })
+        self.assertEqual(folder.status_code, 201)
+        folder_id = folder.get_json()["id"]
+        self.file_ids.append(folder_id)
+        bad_parent = self.client.post("/api/workspace/files", json={
+            "name": "bad-parent.md", "project_id": self.project_id, "parent_id": True,
+        })
+        self.assertEqual(bad_parent.status_code, 400)
+        other = self.client.post("/api/workspace/projects", json={
+            "name": "Other project " + uuid.uuid4().hex[:8],
+        }).get_json()["item"]
+        foreign_parent = self.client.post("/api/workspace/files", json={
+            "name": "foreign.md", "project_id": other["id"], "parent_id": folder_id,
+        })
+        self.assertEqual(foreign_parent.status_code, 400)
+        self.client.delete("/api/workspace/projects/" + other["id"])
+        created = self.client.post("/api/workspace/files", json={
+            "name": "duplicate.md", "project_id": self.project_id,
+        })
+        self.assertEqual(created.status_code, 201)
+        file_id = created.get_json()["id"]
+        self.file_ids.append(file_id)
+        duplicate = self.client.post("/api/workspace/files", json={
+            "name": "duplicate.md", "project_id": self.project_id,
+        })
+        self.assertEqual(duplicate.status_code, 409)
     def test_default_workspace_cannot_be_deleted(self):
         response = self.client.delete("/api/workspace/projects/default")
         self.assertEqual(response.status_code, 400)
