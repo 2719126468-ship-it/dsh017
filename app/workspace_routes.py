@@ -318,8 +318,9 @@ def api_ws_apply_edit():
         isinstance(file_id, bool) or not isinstance(file_id, int) or file_id <= 0
         or isinstance(base_version, bool) or not isinstance(base_version, int) or base_version < 1
         or not isinstance(old_str, str) or not isinstance(new_str, str)
+        or len(old_str) > 1_000_000 or len(new_str) > 1_000_000
     ):
-        return jsonify({"code": -1, "message": "文件 ID、版本或编辑内容格式无效"}), 400
+        return jsonify({"code": -1, "message": "文件 ID、版本或编辑内容格式无效或超过 1000000 字符"}), 400
     raw_mode = body.get("mode", "ask")
     if not isinstance(raw_mode, str):
         return jsonify({"code": -1, "message": "mode 必须是 ask、suggest 或 auto"}), 400
@@ -332,11 +333,17 @@ def api_ws_apply_edit():
     # 先拿文件名做作用域 + 规则检查
     with _DB_LOCK:
         c = _db_conn()
-        row = c.execute("SELECT name, content, version FROM workspace_files "
+        row = c.execute("SELECT name, content, version, kind FROM workspace_files "
                         "WHERE id=? AND deleted_at IS NULL", (file_id,)).fetchone()
         if not row:
             c.close()
             return jsonify({"code": -1, "message": "文件不存在"})
+        if row["kind"] != "file":
+            c.close()
+            return jsonify({
+                "code": -1, "reason": "not_a_file",
+                "message": "AI 修改只允许目标为普通文件",
+            }), 400
         file_name = row["name"]
         current_v = row["version"]
         current_content = row["content"]
@@ -383,11 +390,17 @@ def api_ws_apply_edit():
     # ── 第 5 层：真的应用 ──
     with _DB_LOCK:
         c = _db_conn()
-        row2 = c.execute("SELECT version, content FROM workspace_files "
+        row2 = c.execute("SELECT version, content, kind FROM workspace_files "
                          "WHERE id=? AND deleted_at IS NULL", (file_id,)).fetchone()
         if not row2:
             c.close()
             return jsonify({"code": -1, "message": "文件不存在"})
+        if row2["kind"] != "file":
+            c.close()
+            return jsonify({
+                "code": -1, "reason": "not_a_file",
+                "message": "AI 修改只允许目标为普通文件",
+            }), 400
         current_v = row2["version"]
         current_content = row2["content"]
         if current_v != base_version:
