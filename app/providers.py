@@ -264,7 +264,10 @@ def update_provider(provider_id, body):
                 raise ValueError("默认模型必须包含在模型列表中")
             item["default_model"] = default_model
         if "enabled" in body:
-            item["enabled"] = bool(body["enabled"])
+            enabled = body["enabled"]
+            if not isinstance(enabled, bool):
+                raise ValueError("enabled 必须是布尔值")
+            item["enabled"] = enabled
         _save_metadata(records)
         if "api_key" in body:
             save_provider_secret(provider_id, body["api_key"])
