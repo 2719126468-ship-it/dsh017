@@ -136,6 +136,33 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
                 "backup chat",
             )
 
+    def test_restore_supports_custom_database_name_and_rejects_unsafe_names(self):
+        archive_path = self.create_backup()
+        restored_data = self.root / "custom-db-restored-data"
+        restored_presets = self.root / "custom-db-restored-presets"
+        self.run_tool(
+            "restore", "--archive", archive_path, "--data-dir",
+            restored_data, "--preset-dir", restored_presets,
+            "--db-name", "profile-data.sqlite3",
+        )
+        restored_db = restored_data / "profile-data.sqlite3"
+        self.assertTrue(restored_db.is_file())
+        with sqlite3.connect(restored_db) as connection:
+            self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            self.assertEqual(connection.execute("SELECT title FROM chat_conversations WHERE id='chat-1'").fetchone()[0], "backup chat")
+
+        invalid_names = ("../outside.db", "subdir/app.db", "providers.json", "auth_token", "backup", "")
+        for index, invalid_name in enumerate(invalid_names):
+            with self.subTest(db_name=invalid_name):
+                target_data = self.root / ("invalid-db-name-%d" % index)
+                target_presets = self.root / (target_data.name + "-presets")
+                self.run_tool(
+                    "restore", "--archive", archive_path, "--data-dir",
+                    target_data, "--preset-dir", target_presets,
+                    "--db-name", invalid_name, expected=2,
+                )
+                self.assertFalse(target_data.exists())
+                self.assertFalse(target_presets.exists())
     def test_corrupt_archive_is_rejected_without_creating_destination(self):
         archive_path = self.create_backup()
         corrupt = self.root / "corrupt.tar.gz"

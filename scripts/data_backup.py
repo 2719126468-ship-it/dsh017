@@ -174,6 +174,14 @@ def _restore(args) -> tuple[Path, Path]:
     archive_path = Path(args.archive).expanduser().absolute()
     data_dir = Path(args.data_dir).expanduser().absolute()
     preset_dir = Path(args.preset_dir).expanduser().absolute()
+    db_name = args.db_name
+    if (
+        not isinstance(db_name, str) or not db_name or db_name in (".", "..")
+        or Path(db_name).name != db_name or "/" in db_name or "\\" in db_name
+        or "\x00" in db_name
+        or db_name in ("providers.json", "provider_secrets.json", "auth_token", "admin_token", "backup")
+    ):
+        raise BackupError("database filename must be a safe, non-reserved file name")
     if not _regular_file(archive_path):
         raise BackupError("backup archive not found or is not a regular file")
     data_resolved = data_dir.resolve()
@@ -257,7 +265,7 @@ def _restore(args) -> tuple[Path, Path]:
                 for item in staged_data.iterdir():
                     # The archive uses a stable internal filename, but the app's
                     # default database contract is data/bili_data.db.
-                    target_name = "bili_data.db" if item.name == "database.sqlite3" else item.name
+                    target_name = db_name if item.name == "database.sqlite3" else item.name
                     target = data_dir / target_name
                     with item.open("rb") as source, target.open("xb") as output:
                         shutil.copyfileobj(source, output)
@@ -296,6 +304,7 @@ def main() -> int:
     restore.add_argument("--archive", required=True)
     restore.add_argument("--data-dir", required=True)
     restore.add_argument("--preset-dir", required=True)
+    restore.add_argument("--db-name", default="bili_data.db")
     args = parser.parse_args()
     try:
         if args.command == "backup":
