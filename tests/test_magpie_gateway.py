@@ -89,9 +89,9 @@ class MagpieGatewayTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            with patch("app.providers._MAGPIE_PORT", server.server_port), \\
-                 patch("app.providers._MAGPIE_APP_KEY", synthetic_key):
-                discovered = discover_local_magpie()
+            with patch("app.providers._MAGPIE_PORT", server.server_port):
+                with patch("app.providers._MAGPIE_APP_KEY", synthetic_key):
+                    discovered = discover_local_magpie()
         finally:
             server.shutdown()
             server.server_close()
