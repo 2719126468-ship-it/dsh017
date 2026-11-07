@@ -68,6 +68,34 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertIsNone(providers.get_provider("sample-provider"))
         self.assertEqual(providers.get_provider_secret("sample-provider"), "")
 
+    def test_enabled_flag_requires_a_boolean(self):
+        providers.add_provider({
+            "id": "enabled-provider",
+            "name": "Enabled Provider",
+            "base_url": "https://api.example.test/v1",
+            "models": ["sample-chat"],
+            "enabled": True,
+        })
+        updated = providers.update_provider("enabled-provider", {"enabled": False})
+        self.assertFalse(updated["enabled"])
+
+        for invalid in ("false", "true", 0, 1, None):
+            with self.subTest(value=invalid):
+                with self.assertRaisesRegex(ValueError, "enabled 必须是布尔值"):
+                    providers.update_provider("enabled-provider", {"enabled": invalid})
+        self.assertFalse(providers.get_provider("enabled-provider")["enabled"])
+
+        for index, invalid in enumerate(("false", "true", 0, 1, None)):
+            with self.subTest(create_value=invalid):
+                with self.assertRaisesRegex(ValueError, "enabled 必须是布尔值"):
+                    providers.add_provider({
+                        "id": "invalid-enabled-%d" % index,
+                        "name": "Invalid Enabled",
+                        "base_url": "https://api.example.test/v1",
+                        "models": ["sample-chat"],
+                        "enabled": invalid,
+                    })
+
     def test_rejects_unsafe_base_urls_and_invalid_model_ids(self):
         bad_urls = [
             "file:///etc/passwd",

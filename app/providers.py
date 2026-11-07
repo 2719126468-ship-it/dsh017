@@ -218,6 +218,9 @@ def add_provider(body):
         raise ValueError("供应商 ID 只能包含小写字母、数字、下划线和连字符")
     if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
         raise ValueError("供应商名称必填，最多80字符")
+    enabled = body.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ValueError("enabled 必须是布尔值")
     base_url = _normalise_base_url(body.get("base_url", ""))
     models = _clean_models(body.get("models", []))
     default_model = body.get("default_model", "")
@@ -232,7 +235,7 @@ def add_provider(body):
         records.append({
             "id": provider_id, "name": name.strip(), "base_url": base_url,
             "protocol": "openai-chat-completions", "models": models,
-            "default_model": default_model, "enabled": body.get("enabled") is not False,
+            "default_model": default_model, "enabled": enabled,
             "builtin": False,
         })
         _save_metadata(records)
@@ -264,7 +267,10 @@ def update_provider(provider_id, body):
                 raise ValueError("默认模型必须包含在模型列表中")
             item["default_model"] = default_model
         if "enabled" in body:
-            item["enabled"] = bool(body["enabled"])
+            enabled = body["enabled"]
+            if not isinstance(enabled, bool):
+                raise ValueError("enabled 必须是布尔值")
+            item["enabled"] = enabled
         _save_metadata(records)
         if "api_key" in body:
             save_provider_secret(provider_id, body["api_key"])
