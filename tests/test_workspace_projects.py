@@ -108,6 +108,38 @@ class WorkspaceProjectApiTests(unittest.TestCase):
         })
         self.assertEqual(stale.status_code, 409)
 
+    def test_ai_apply_edit_rejects_directories_and_oversized_patches(self):
+        project = self.client.post("/api/workspace/projects", json={
+            "name": "AI edit guards " + uuid.uuid4().hex[:8],
+        }).get_json()["item"]
+        self.project_id = project["id"]
+
+        folder = self.client.post("/api/workspace/files", json={
+            "name": "src", "project_id": self.project_id, "kind": "directory",
+        })
+        self.assertEqual(folder.status_code, 201)
+        folder_id = folder.get_json()["id"]
+        self.file_ids.append(folder_id)
+
+        directory_edit = self.client.post("/api/workspace/apply_edit", json={
+            "file_id": folder_id, "base_version": 1,
+            "old_str": "", "new_str": "must not be stored", "mode": "auto",
+        })
+        self.assertEqual(directory_edit.status_code, 400)
+        self.assertEqual(directory_edit.get_json()["reason"], "not_a_file")
+
+        file_response = self.client.post("/api/workspace/files", json={
+            "name": "large.txt", "project_id": self.project_id,
+        })
+        self.assertEqual(file_response.status_code, 201)
+        file_id = file_response.get_json()["id"]
+        self.file_ids.append(file_id)
+        oversized_edit = self.client.post("/api/workspace/apply_edit", json={
+            "file_id": file_id, "base_version": 1,
+            "old_str": "", "new_str": "x" * 1_000_001, "mode": "auto",
+        })
+        self.assertEqual(oversized_edit.status_code, 400)
+
     def test_default_workspace_cannot_be_deleted(self):
         response = self.client.delete("/api/workspace/projects/default")
         self.assertEqual(response.status_code, 400)
