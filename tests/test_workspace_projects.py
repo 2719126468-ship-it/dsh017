@@ -207,11 +207,16 @@ class WorkspaceProjectApiTests(unittest.TestCase):
         })
 
         # No matching rule must ask; it must never silently grant auto-write.
+        self.assertEqual(
+            workspace_routes._ws_rule_lookup("plan.md", "edit"),
+            "ask",
+            "unexpected rules: %r" % self.client.get("/api/workspace/rules").get_json()["items"],
+        )
         default_ask = self.client.post("/api/workspace/apply_edit", json={
             "file_id": file_id, "base_version": 2,
             "old_str": "alpha", "new_str": "changed", "mode": "auto",
         })
-        self.assertEqual(default_ask.status_code, 409)
+        self.assertEqual(default_ask.status_code, 409, default_ask.get_json())
         self.assertEqual(default_ask.get_json()["reason"], "rule_ask")
 
         # A matching deny rule takes precedence over a more specific allow.
