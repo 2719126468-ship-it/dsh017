@@ -3,7 +3,7 @@
 > **文档状态：** 战略基线 / 执行规划  
 > **规划基准日：** 2026-11-07  
 > **规划周期：** 2026 Q4—2027 Q4  
-> **当前仓库基线：** `main`，2026-11-07 审查时最新提交 `f1a06bfdc63f3476a281eeb74a3b9d90be2bd04a`  
+> **当前仓库基线：** `main`，2026-11-07 审查时最新提交 `07fa91c63a1ddbdae4cf42be4ba5fb7520f909e7`  
 > **产品定位：** Personal AI Operating Environment（个人 AI 工作与生活中枢）
 
 本文件是 DSH-017 的长期产品战略、架构方向和版本规划依据。它不意味着文中所有目标能力都已实现。凡涉及现状的描述均以当前仓库代码、README、Android README、测试文件和提交记录为依据；未完成验收的能力会明确标为“待验证”。
@@ -54,10 +54,10 @@ DSH-017 是一个以个人为中心、以 AI 为智能核心、以 Workspace 为
 
 ### 当前主分支与自动化证据
 
-- **main HEAD：** [`f1a06bfd`](https://github.com/2719126468-ship-it/dsh017/commit/f1a06bfdc63f3476a281eeb74a3b9d90be2bd04a)（`docs: link master strategy from README`）。
-- **CI：** [main push run #42311377222](https://github.com/2719126468-ship-it/dsh017/actions/runs/42311377222) 成功；Python 3.10、3.11、3.12 三个矩阵 Job 全部成功，包含依赖安装、Python 编译、单元 / 路由测试、内联 JavaScript 检查和 Shell 语法检查。
-- **Android：** [main push run #42311377201](https://github.com/2719126468-ship-it/dsh017/actions/runs/42311377201) 成功；`Build ARMv7-32bit` 与 `Build ARM64-64bit` 两个 Job 均成功，均完成 APK stage 和 workflow artifact 上传。该次 main push 的 `Publish GitHub Release` Job 按工作流条件跳过，这是预期行为；正式 Release 只在推送 `v*` tag 时创建。
-- **当前 main workflow artifacts：** [Android run artifacts](https://github.com/2719126468-ship-it/dsh017/actions/runs/42311377201)。ARMv7 artifact SHA256：`77e78bfab4d09a425f7aba00edad1c8eee522569b907bc0c6afdce17b52b4164`；ARM64 artifact SHA256：`576a80ee0cb81126c5047c01eb343f96d7450d9ecbbc12a2918646e7d4f329d1`。Actions artifact 有保留期限，不能代替长期 Release 资产。
+- **main HEAD：** [`07fa91c`](https://github.com/2719126468-ship-it/dsh017/commit/07fa91c63a1ddbdae4cf42be4ba5fb7520f909e7)（`docs: link master strategy from README`）。
+- **CI：** [main push run #42363124784](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363124784) 成功；Python 3.10、3.11、3.12 三个矩阵 Job 全部成功，包含依赖安装、Python 编译、单元 / 路由测试、内联 JavaScript 检查和 Shell 语法检查。
+- **Android：** [main push run #42363124808](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363124808) 成功；`Build ARMv7-32bit` 与 `Build ARM64-64bit` 两个 Job 均成功，均完成 APK stage 和 workflow artifact 上传。该次 main push 的 `Publish GitHub Release` Job 按工作流条件跳过，这是预期行为；正式 Release 只在推送 `v*` tag 时创建。
+- **当前 main workflow artifacts：** [Android run artifacts](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363124808)。ARMv7 artifact SHA256：`fea0ef7fd4ec22c7774b010f14786dcbed4ea5c63fca8bcce82990d3b599622c`；ARM64 artifact SHA256：`b4b9429bf18d61da42f52ea206a1e484494c9a25703a141edcbc1323ab52d427`。Actions artifact 有保留期限，不能代替长期 Release 资产。
 - **历史 PR 检查：** PR #23 的最终 PR 检查成功并已合并；早期中间提交曾因测试 Mock 仍使用旧 `client.s.post` 接口、以及模拟 SSE 响应缺少 `status` 属性而失败。后续提交同步更新测试并补齐模拟对象，最终 PR 检查和 main push 检查通过。不要把这些早期 PR 失败误报为当前 main 失败。
 - **Issues / PR：** 本轮登记前没有开放 Issue 或 PR；近期 PR #20–#23 均已合并。现已创建以下七个 P0 跟踪项，见第 7 节。
 
@@ -66,6 +66,8 @@ DSH-017 是一个以个人为中心、以 AI 为智能核心、以 Workspace 为
 当前公开 [v0.1.2 Release](https://github.com/2719126468-ship-it/dsh017/releases/tag/v0.1.2) 指向提交 `5aa8ea52225de8b341436ba9aa51cd51549d0ce7`，并包含 ARMv7 APK、ARM64 APK 与 `SHA256SUMS.txt`。但 main 后续又合入 Magpie 自动发现、Provider DNS 固定传输 / SSE 修复及 Master Plan 文档；这些后续提交不在现有 v0.1.2 Release 的目标提交中。
 
 当前 Gradle 配置仍为 `versionName 0.1.2`、`versionCode 3`。因此不能移动或覆盖现有 v0.1.2 tag。建议在 P0 实机与集成验收通过后发布下一个 patch 版本（建议 v0.1.3），递增 versionCode，并为该 Release 重新构建双 ABI APK。
+
+另一个发布阻断项是 APK 签名连续性：当前 CI 构建 Debug variant，尚未证明不同 workflow run 使用同一证书。必须先完成 [P0 Issue #31](https://github.com/2719126468-ship-it/dsh017/issues/31)，验证覆盖升级和应用私有数据保留；不能把“APK 构建成功”误认为“升级安装成功”。
 
 ### 尚未由仓库自动化证明的事项
 
@@ -420,8 +422,8 @@ Workspace 是项目数据和修改的权威载体。功能优先级：
 ### EPIC P0 — v0.1.2 稳定化
 
 <text>**已由自动化证据验证：**</text>
-- [x] **P0-02 CI Evidence**：当前 main HEAD 的 Python 3.10 / 3.11 / 3.12 CI 通过；详见 [run #42311377222](https://github.com/2719126468-ship-it/dsh017/actions/runs/42311377222)。
-- [x] **P0-03 Android ARM Build**：当前 main HEAD 的 ARMv7 / ARM64 Build Job 均通过并上传 workflow artifacts；详见 [run #42311377201](https://github.com/2719126468-ship-it/dsh017/actions/runs/42311377201)。这不代表实机运行已通过。
+- [x] **P0-02 CI Evidence**：当前 main HEAD 的 Python 3.10 / 3.11 / 3.12 CI 通过；详见 [run #42363124784](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363124784)。
+- [x] **P0-03 Android ARM Build**：当前 main HEAD 的 ARMv7 / ARM64 Build Job 均通过并上传 workflow artifacts；详见 [run #42363124808](https://github.com/2719126468-ship-it/dsh017/actions/runs/42363124808)。这不代表实机运行已通过。
 - [x] **P0-10 Strategy / README link**：Master Plan 已提交至 `docs/MASTER_PLAN.md`，README 已添加入口。
 
 **仍需完成的 P0：**
@@ -432,6 +434,7 @@ Workspace 是项目数据和修改的权威载体。功能优先级：
 - [ ] **P0-07 Workspace Regression**：[#30](https://github.com/2719126468-ship-it/dsh017/issues/30) — 验证项目、文件、版本、冲突、审批、拒绝规则和自动修改熔断。
 - [ ] **P0-08 Backup Restore Drill**：[#28](https://github.com/2719126468-ship-it/dsh017/issues/28) — 在隔离目录完成数据库与用户数据备份、恢复和校验。
 - [ ] **P0-09 Security Regression**：[#29](https://github.com/2719126468-ship-it/dsh017/issues/29) — 验证认证、管理员权限、SSRF、DNS 固定、重定向、凭据脱敏和网络边界。
+- [ ] **P0-11 Android Signing Continuity**：[#31](https://github.com/2719126468-ship-it/dsh017/issues/31) — 验证跨 CI 构建签名证书连续性，确保升级安装可行且不要求卸载丢失应用私有数据。
 
 ### EPIC P1 — v0.2.0 Workspace 产品化
 
@@ -616,6 +619,7 @@ Workspace 是项目数据和修改的权威载体。功能优先级：
 | TD-13 | 局域网 HTTP 凭据保护依赖可信网络 | README 明确提示 HTTP Basic / Bearer 在普通 HTTP 网络中不加密 | 高 | 默认建议 VPN / HTTPS；评估安全反向代理配置 |
 | TD-14 | 严格 CSP 尚未启用 | README 说明未引入会破坏内联脚本的严格 CSP | 中 | 先收敛内联脚本和 nonce/hash 策略，再逐页启用 |
 | TD-15 | 模块 / 文档边界需持续同步 | 新增 Provider、Workspace 和 Android 能力后，目录与接口持续演进 | 低中 | 每个跨模块 PR 更新架构图、README 和变更记录 |
+| TD-16 | Debug APK 的签名连续性尚未证明 | CI 使用 assemble*Debug，未配置持久化 signingConfig；不同临时 Runner 的证书是否一致仍需实测 | 高 | 比较多次构建证书指纹；设计 GitHub Secrets 驱动的稳定发布签名；验证覆盖升级与数据保留 |
 
 技术债处理原则：先补测试和可观测性，再重构；先解决数据、安全和发布风险，再做代码美化。不得把“重写全部模块”作为默认偿还技术债的方法。
 
