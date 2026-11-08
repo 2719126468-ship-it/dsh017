@@ -181,6 +181,48 @@ PR #45 的 Python 3.10 / 3.11 / 3.12 CI [run #42365818465](https://github.com/27
 - [#26](https://github.com/2719126468-ship-it/dsh017/issues/26) 的本机 Provider E2E 已具备；真实 HTTPS 上游 / 用户模型仍未通过实际凭据验收。
 - 公开 Release 仍是 `v0.1.2`。未配置并验证真实签名 Secrets、#46 的 Android 实机迁移、#28 的真实恢复演练、#25/#30 实机体验及 #26/#27 真实供应商授权前，不发布 `v0.1.3`。
 
+
+## 0.5 执行状态增补（2026-11-08，安全回归与双 ABI CI 更新）
+
+本节记录截至 2026-11-08 17:56（UTC+08:00）可从 GitHub 主分支和 Actions 直接核实的最新状态。
+
+### 最新主线与自动化证据
+
+- **main HEAD：** [`5bb4768`](https://github.com/2719126468-ship-it/dsh017/commit/5bb476884643fd203185eaad86e9855e2a3690c9)，提交信息为 `fix(android): clear Keystore provider key after deletion (#55)`。
+- **Python CI：** [run #42468542210](https://github.com/2719126468-ship-it/dsh017/actions/runs/42468542210) 成功；Python 3.10、3.11、3.12 三个 Job 全部成功。
+- **Android CI：** [run #42468542291](https://github.com/2719126468-ship-it/dsh017/actions/runs/42468542291) 成功；ARMv7-32bit 与 ARM64-64bit Debug APK 构建及 artifact 上传均成功。该次 push 不触发签名 Release 构建，Release signing 与 publish jobs 按 tag-only 条件跳过，这是预期行为。
+- **最近合入的安全 / 回归变更：** PR #53 增加远程认证与跨站写入边界测试；PR #54 增加图片代理 MIME、重定向和响应体大小限制测试；PR #55 修复删除 Provider 后 Android Keystore 中残留 Provider key 的清理路径，并增加对应断言。
+- **PR 状态：** 本次审查时没有开放 PR。最近合入主线的代码已通过上述 main push CI；不得把 PR 合并或源码断言等同于真实设备 / 上游服务验收。
+
+### 当前 P0 阻断项
+
+截至本次审查，GitHub 上仍有 9 个开放 P0 Issue：
+
+- [#24](https://github.com/2719126468-ship-it/dsh017/issues/24)：下一版 Android Release 对齐当前 main。
+- [#25](https://github.com/2719126468-ship-it/dsh017/issues/25)：Android 真机 Smoke Test。
+- [#26](https://github.com/2719126468-ship-it/dsh017/issues/26)：真实 OpenAI-compatible Provider 端到端验证。
+- [#27](https://github.com/2719126468-ship-it/dsh017/issues/27)：Magpie Gateway / Qoder 真实授权集成验证。
+- [#28](https://github.com/2719126468-ship-it/dsh017/issues/28)：隔离 SQLite 备份与恢复演练。
+- [#29](https://github.com/2719126468-ship-it/dsh017/issues/29)：认证、凭据、网络出口和日志脱敏集中安全回归。
+- [#30](https://github.com/2719126468-ship-it/dsh017/issues/30)：Workspace API / AI edit 回归。
+- [#31](https://github.com/2719126468-ship-it/dsh017/issues/31)：持久 Release 签名与升级连续性验证。
+- [#46](https://github.com/2719126468-ship-it/dsh017/issues/46)：旧 Debug package 到新 Release package 的 SAF 数据迁移。
+
+### 下一阶段执行顺序
+
+1. 先实现 #46 的 Android SAF 导出 / 首次启动导入流程，复用现有 `scripts/data_backup.py` 的归档校验；导入必须在服务和 SQLite 初始化之前完成，失败或取消不得覆盖现有数据。
+2. 完成 #28 的隔离目录备份 / 恢复演练，并将真实运行结果记录到 Issue。
+3. 补齐 #30 / #29 自动化回归中尚未覆盖的边界；安全修复继续使用独立 PR。
+4. 在用户设备与真实 Provider / Magpie 环境具备时执行 #25–#27 的人工验收；未提供凭据或设备证据的项目保持待验证。
+5. 只有 #31 与 #46 的签名 / 迁移门槛和其他发布阻断项全部满足后，才推进 #24 的新版本 Release。
+
+### 发布状态与明确限制
+
+- 公开 Release 仍为 `v0.1.2`；本次 main push 产生的是 CI Debug artifacts，不是正式签名 Release APK。
+- Gradle 当前仍为 `versionName 0.1.2`、`versionCode 3`；不移动或覆盖现有 `v0.1.2` tag。
+- CI 成功只证明自动化测试和 APK 打包通过，不证明 Mate 20 Pro / Android 10 安装、升级、数据迁移、真实 Provider 或 Magpie 流程通过。
+- 不把缺少真实设备 / 凭据的验收项目标记为完成，也不为赶进度提前发布 `v0.1.3`。
+
 ---
 
 ## 1. 愿景、使命与产品边界
