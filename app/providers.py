@@ -637,7 +637,15 @@ input:focus,textarea:focus,select:focus{border-color:var(--p-accent)}
   if(!confirm("删除供应商 "+id+"？"))return;
   fetch("/api/providers/"+encodeURIComponent(id),{method:"DELETE"})
    .then(function(r){return r.json().then(function(j){if(!r.ok||j.code!==0)throw new Error(j.message||"删除失败");return j;});})
-   .then(function(){status("供应商已删除。","ok");load();})
+   .then(function(){
+    var nativeBridge=window.DSHProviderKeys&&typeof window.DSHProviderKeys.save==="function";
+    if(nativeBridge&&!window.DSHProviderKeys.save(id,"")){
+     status("供应商已删除，但 Android Keystore 密钥清理失败。请检查应用状态。","error");
+    }else{
+     status(nativeBridge?"供应商已删除，Android Keystore 密钥已清理。":"供应商已删除。","ok");
+    }
+    load();
+   })
    .catch(function(e){status(e.message,"error");});
  }
  $("providerForm").addEventListener("submit",function(e){
