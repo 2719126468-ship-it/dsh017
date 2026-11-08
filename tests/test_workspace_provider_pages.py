@@ -52,6 +52,9 @@ class WorkspaceAndProviderPageTests(unittest.TestCase):
         self.assertIn("/api/providers/detect-magpie", body)
         self.assertIn("DSHProviderKeys", body)
         self.assertIn("secret_configured", body)
+        delete_handler = body.split("function deleteProvider(id){", 1)[1].split('$("providerForm")', 1)[0]
+        self.assertIn('window.DSHProviderKeys.save(id,"")', delete_handler)
+        self.assertLess(delete_handler.index(".then(function"), delete_handler.index('window.DSHProviderKeys.save(id,"")'))
 
 
 if __name__ == "__main__":
