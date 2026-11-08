@@ -184,12 +184,29 @@ def _restore(args) -> tuple[Path, Path]:
         raise BackupError("database filename must be a safe, non-reserved file name")
     if not _regular_file(archive_path):
         raise BackupError("backup archive not found or is not a regular file")
+    # Android stores presets under getFilesDir()/dsh017/presets, while
+    # desktop deployments commonly keep them in a sibling directory. Support
+    # that one explicit nested layout without relaxing the no-overwrite rule.
+    if data_dir.is_symlink() or preset_dir.is_symlink():
+        raise BackupError("restore destinations must not be symlinks")
     data_resolved = data_dir.resolve()
     preset_resolved = preset_dir.resolve()
-    if data_resolved == preset_resolved or data_resolved in preset_resolved.parents or preset_resolved in data_resolved.parents:
-        raise BackupError("data and preset destinations must be separate directories")
-    _check_empty_destination(data_dir, "data")
-    _check_empty_destination(preset_dir, "preset")
+    nested_android_presets = preset_resolved.parent == data_resolved and preset_resolved.name == "presets"
+    if data_resolved == preset_resolved or (
+        (data_resolved in preset_resolved.parents or preset_resolved in data_resolved.parents)
+        and not nested_android_presets
+    ):
+        raise BackupError("data and preset destinations must be separate directories or the Android data/presets layout")
+    if nested_android_presets:
+        if data_dir.exists() and (not data_dir.is_dir() or any(
+            child != preset_dir for child in data_dir.iterdir()
+        )):
+            raise BackupError("data destination must be new or contain only the empty presets directory")
+        if preset_dir.exists() and (not preset_dir.is_dir() or any(preset_dir.iterdir())):
+            raise BackupError("preset destination must be a new or empty directory")
+    else:
+        _check_empty_destination(data_dir, "data")
+        _check_empty_destination(preset_dir, "preset")
 
     with tempfile.TemporaryDirectory(prefix="dsh017-restore-") as temp_name:
         stage = Path(temp_name)
