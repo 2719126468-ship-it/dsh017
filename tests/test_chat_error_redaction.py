@@ -46,8 +46,8 @@ class ChatUpstreamErrorRedactionTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=2)
 
-    def test_http_error_body_cannot_reflect_provider_secret_into_chat_sse(self):
-        provider = {
+    def _provider(self):
+        return {
             "id": "error-redaction-e2e",
             "name": "Local Error Redaction E2E",
             "base_url": self.base_url,
@@ -56,17 +56,38 @@ class ChatUpstreamErrorRedactionTests(unittest.TestCase):
             "default_model": "local-chat-model",
             "enabled": True,
         }
-        with patch("app.providers.get_provider", return_value=provider), \
+
+    def _chat(self):
+        return self.client.post("/api/chat", json={
+            "provider_id": "error-redaction-e2e",
+            "model": "local-chat-model",
+            "messages": [{"role": "user", "content": "trigger a synthetic upstream failure"}],
+        }, buffered=True)
+
+    def test_http_error_body_cannot_reflect_provider_secret_into_chat_sse(self):
+        with patch("app.providers.get_provider", return_value=self._provider()), \
              patch("app.providers.get_provider_secret", return_value=self.secret):
-            response = self.client.post("/api/chat", json={
-                "provider_id": "error-redaction-e2e",
-                "model": "local-chat-model",
-                "messages": [{"role": "user", "content": "trigger a synthetic 401"}],
-            }, buffered=True)
+            response = self._chat()
 
         self.assertEqual(response.status_code, 200)
         stream = response.get_data(as_text=True)
         self.assertIn("HTTP 401", stream)
+        self.assertIn("[REDACTED]", stream)
+        self.assertNotIn(self.secret, stream)
+
+    def test_transport_exception_cannot_reflect_provider_secret_into_chat_sse(self):
+        exception = RuntimeError(
+            "upstream transport failed: Authorization: Bearer " + self.secret
+            + "; api_key=" + self.secret
+        )
+        with patch("app.providers.get_provider", return_value=self._provider()), \
+             patch("app.providers.get_provider_secret", return_value=self.secret), \
+             patch("app.chat_ui.provider_request", side_effect=exception), \
+             patch("time.sleep", return_value=None):
+            response = self._chat()
+
+        self.assertEqual(response.status_code, 200)
+        stream = response.get_data(as_text=True)
         self.assertIn("[REDACTED]", stream)
         self.assertNotIn(self.secret, stream)
 
