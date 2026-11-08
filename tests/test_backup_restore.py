@@ -163,6 +163,42 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
                 )
                 self.assertFalse(target_data.exists())
                 self.assertFalse(target_presets.exists())
+    def test_restore_supports_android_nested_preset_directory_without_overwrite(self):
+        archive_path = self.create_backup()
+        restored_data = self.root / "android-private" / "dsh017"
+        restored_presets = restored_data / "presets"
+        restored_presets.mkdir(parents=True)
+        self.run_tool(
+            "restore", "--archive", archive_path, "--data-dir",
+            restored_data, "--preset-dir", restored_presets,
+        )
+        database = restored_data / "bili_data.db"
+        self.assertTrue(database.is_file())
+        with sqlite3.connect(database) as connection:
+            self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            self.assertEqual(
+                connection.execute("SELECT title FROM chat_conversations WHERE id='chat-1'").fetchone()[0],
+                "backup chat",
+            )
+        self.assertEqual(
+            (restored_presets / "Writing.txt").read_text(encoding="utf-8"),
+            "private writing preset",
+        )
+
+    def test_restore_rejects_nonempty_android_nested_destination(self):
+        archive_path = self.create_backup()
+        restored_data = self.root / "android-private" / "dsh017"
+        restored_presets = restored_data / "presets"
+        restored_presets.mkdir(parents=True)
+        sentinel = restored_data / "keep.txt"
+        sentinel.write_text("do not overwrite", encoding="utf-8")
+        self.run_tool(
+            "restore", "--archive", archive_path, "--data-dir",
+            restored_data, "--preset-dir", restored_presets, expected=2,
+        )
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "do not overwrite")
+        self.assertEqual(list(restored_presets.iterdir()), [])
+
     def test_corrupt_archive_is_rejected_without_creating_destination(self):
         archive_path = self.create_backup()
         corrupt = self.root / "corrupt.tar.gz"
