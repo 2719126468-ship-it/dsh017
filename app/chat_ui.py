@@ -8,7 +8,7 @@ import time
 import urllib.parse
 from flask import Blueprint, request, jsonify, Response
 from app.llm_config import ZHIPU_API_KEY, ZHIPU_BASE, ZHIPU_MODEL
-from app.providers import resolve_provider
+from app.providers import resolve_provider, _safe_upstream_error
 from app.provider_transport import provider_request
 
 chat_ui_bp = Blueprint('chat_ui', __name__)
@@ -146,7 +146,7 @@ def api_chat():
                 # 状态码检查：429/1305 走重试，其他非 200 直接吐错误
                 if r.status_code != 200:
                     try:
-                        err_body = r.text[:500]
+                        err_body = _safe_upstream_error(r.text[:500], provider_key)
                     except Exception:
                         err_body = ""
                     is_glm_overload = (
@@ -311,7 +311,7 @@ def api_chat():
                 yield "data: [DONE]\n\n"
                 return
             except Exception as e:
-                last_err = str(e)
+                last_err = _safe_upstream_error(e, provider_key)
                 if attempt < max_attempts - 1:
                     _t.sleep(1.5 * (attempt + 1))
                     continue
