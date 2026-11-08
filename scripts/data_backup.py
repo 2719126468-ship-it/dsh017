@@ -284,9 +284,18 @@ def _restore(args) -> tuple[Path, Path]:
                     # default database contract is data/bili_data.db.
                     target_name = db_name if item.name == "database.sqlite3" else item.name
                     target = data_dir / target_name
-                    with item.open("rb") as source, target.open("xb") as output:
-                        shutil.copyfileobj(source, output)
-                    os.chmod(target, 0o600)
+                    try:
+                        with item.open("rb") as source, target.open("xb") as output:
+                            shutil.copyfileobj(source, output)
+                        os.chmod(target, 0o600)
+                    except Exception:
+                        # Include partially written targets in rollback even when
+                        # the copy or chmod fails before the normal append.
+                        try:
+                            target.unlink()
+                        except OSError:
+                            pass
+                        raise
                     copied.append(target)
                 for item in staged_presets.iterdir():
                     target = preset_dir / item.name
