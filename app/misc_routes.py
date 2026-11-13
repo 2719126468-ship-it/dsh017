@@ -475,7 +475,10 @@ function saveSearchState(scrollY){
       version: 1,
       savedAt: Date.now(),
       q: ST.q,
-      page: ST.page,
+      // Only the first 180 items are persisted. Rewind the saved page to
+      // the last page represented by that snapshot so "load more" never skips
+      // pages that were omitted by the storage cap.
+      page: Math.min(ST.page, Math.ceil(savedItems.length / 20)),
       totalPage: ST.totalPage,
       total: ST.total,
       order: ST.order,
