@@ -67,6 +67,19 @@ class AndroidPackagingContractTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v4", workflow)
 
 
+    def test_webview_video_fullscreen_enters_landscape_and_restores_orientation(self):
+        activity = self.read("app/src/main/java/com/dsh017/android/MainActivity.java")
+        player = (ROOT / "app" / "play_routes.py").read_text(encoding="utf-8")
+        self.assertIn("onShowCustomView", activity)
+        self.assertIn("onHideCustomView", activity)
+        self.assertIn("SCREEN_ORIENTATION_SENSOR_LANDSCAPE", activity)
+        self.assertIn("SYSTEM_UI_FLAG_IMMERSIVE_STICKY", activity)
+        self.assertIn("hideFullscreenView()", activity)
+        self.assertIn('id="fullscreenBtn"', player)
+        self.assertIn("webkitEnterFullscreen", player)
+        self.assertIn("requestFullscreen", player)
+        self.assertIn("fullscreenContainer", activity)
+
     def test_release_build_requires_persistent_signing_and_checks_both_abis(self):
         gradle = self.read("app/build.gradle")
         workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
