@@ -367,20 +367,31 @@ var list=document.getElementById("list"),
     go=document.getElementById("go"),
     moreWrap=document.getElementById("moreWrap");
 
+var SEARCH_STATE_KEY = "dsh017:bili-search-state:v1";
+var SEARCH_STATE_TTL = 6 * 60 * 60 * 1000;
+var MAX_RESTORED_ITEMS = 180;
+var _searchSaveTimer = null;
 var ST={ q:"", page:0, totalPage:0, total:0, loading:false, order:"totalrank",
-  type:"video", duration:0 };
-  window.ST_SET_ORDER = function(o){ ST.order=o; if(ST.q){ fetchPage(1,false); } };
-  window.ST_SET_TYPE = function(t){ ST.type=t; if(ST.q){ fetchPage(1,false); } };
-  window.ST_SET_DURATION = function(d){ ST.duration=d; if(ST.q){ fetchPage(1,false); } };
+  type:"video", duration:0, items:[], seen:{} };
+window.ST_SET_ORDER = function(o){ ST.order=o; if(ST.q){ fetchPage(1,false); } };
+window.ST_SET_TYPE = function(t){ ST.type=t; if(ST.q){ fetchPage(1,false); } };
+window.ST_SET_DURATION = function(d){ ST.duration=d; if(ST.q){ fetchPage(1,false); } };
 
 /* 顶栏惯性内缩 */
 var lastY=0;
 window.addEventListener("scroll", function(){
-  var y = window.pageYOffset;
+  var y = window.pageYOffset || 0;
   if(y>lastY && y>40) hdr.classList.add("compact");
   else if(y<lastY-10) hdr.classList.remove("compact");
   lastY=y;
+  scheduleSearchSave();
 },{passive:true});
+window.addEventListener("pagehide", function(){
+  saveSearchState(window.pageYOffset || 0);
+});
+document.addEventListener("visibilitychange", function(){
+  if(document.visibilityState === "hidden") saveSearchState(window.pageYOffset || 0);
+});
 
 /* 按压：弹簧缩放 + 状态类 */
 function bindPress(el){
@@ -419,17 +430,153 @@ function esc(s){return(s||"").replace(/[&<>"]/g,function(c){
 function stripEm(s){return(s||"").replace(/<em class="keyword">|<\/em>/g,"")}
 
 function readParams(){
-  var p={};
-  var m=location.search.match(/[?&]q=([^&]*)/);
-  if(m)try{p.q=decodeURIComponent(m[1].replace(/\+/g," "))}catch(e){}
-  var mp=location.search.match(/[?&]page=(\d+)/);
-  if(mp)p.page=parseInt(mp[1],10)||1;
+  var params = new URLSearchParams(location.search || "");
+  var p = {};
+  p.q = params.get("q") || "";
+  p.page = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
+  p.order = params.get("order") || "totalrank";
+  p.type = params.get("type") || "video";
+  p.duration = parseInt(params.get("duration") || "0", 10) || 0;
+  if(["totalrank","click","pubdate","dm","stow"].indexOf(p.order) < 0) p.order = "totalrank";
+  if(["video","media_bangumi","media_ft"].indexOf(p.type) < 0) p.type = "video";
+  if([0,1,2,3,4].indexOf(p.duration) < 0) p.duration = 0;
   return p;
 }
 function writeParams(){
-  try{ if(history.replaceState)
-    history.replaceState(null,"","?q="+encodeURIComponent(ST.q)+"&page="+ST.page);
+  try{
+    if(history.replaceState){
+      var query = "?q=" + encodeURIComponent(ST.q) +
+        "&page=" + Math.max(1, ST.page) +
+        "&order=" + encodeURIComponent(ST.order) +
+        "&type=" + encodeURIComponent(ST.type) +
+        "&duration=" + ST.duration;
+      history.replaceState(null, "", query);
+    }
   }catch(e){}
+}
+
+function safeSearchItem(item){
+  if(!item || typeof item !== "object" || !/^BV[0-9A-Za-z]+$/.test(String(item.bvid || ""))) return null;
+  return {
+    bvid: String(item.bvid),
+    title: String(item.title || "").slice(0, 500),
+    pic: String(item.pic || "").slice(0, 2048),
+    duration: String(item.duration || "").slice(0, 40),
+    author: String(item.author || "").slice(0, 160),
+    play: Math.max(0, Number(item.play || 0) || 0)
+  };
+}
+
+function saveSearchState(scrollY){
+  if(!ST.q || !ST.items || !ST.items.length) return;
+  try{
+    var savedItems = ST.items.slice(0, MAX_RESTORED_ITEMS).map(safeSearchItem).filter(Boolean);
+    var snapshot = {
+      version: 1,
+      savedAt: Date.now(),
+      q: ST.q,
+      // Only the first 180 items are persisted. Rewind the saved page to
+      // the last page represented by that snapshot so "load more" never skips
+      // pages that were omitted by the storage cap.
+      page: Math.min(ST.page, Math.ceil(savedItems.length / 20)),
+      totalPage: ST.totalPage,
+      total: ST.total,
+      order: ST.order,
+      type: ST.type,
+      duration: ST.duration,
+      scrollY: Math.max(0, Number(scrollY) || 0),
+      items: savedItems
+    };
+    sessionStorage.setItem(SEARCH_STATE_KEY, JSON.stringify(snapshot));
+  }catch(e){}
+}
+
+function scheduleSearchSave(){
+  if(!ST.q || !ST.items || !ST.items.length) return;
+  if(_searchSaveTimer) clearTimeout(_searchSaveTimer);
+  _searchSaveTimer = setTimeout(function(){
+    _searchSaveTimer = null;
+    saveSearchState(window.pageYOffset || 0);
+  }, 180);
+}
+
+function readSearchState(params){
+  try{
+    var raw = sessionStorage.getItem(SEARCH_STATE_KEY);
+    if(!raw) return null;
+    var snapshot = JSON.parse(raw);
+    if(!snapshot || snapshot.version !== 1 || !Array.isArray(snapshot.items)) return null;
+    if(!snapshot.q || snapshot.q !== params.q) return null;
+    if(snapshot.order !== params.order || snapshot.type !== params.type ||
+       Number(snapshot.duration) !== Number(params.duration)) return null;
+    if(!snapshot.page || snapshot.page < 1 || Date.now() - Number(snapshot.savedAt || 0) > SEARCH_STATE_TTL) return null;
+    var items = snapshot.items.map(safeSearchItem).filter(Boolean);
+    if(!items.length) return null;
+    snapshot.items = items;
+    return snapshot;
+  }catch(e){ return null; }
+}
+
+function setActiveChip(selector, attribute, value){
+  var bar = document.querySelector(selector);
+  if(!bar) return;
+  var chips = bar.querySelectorAll("[" + attribute + "]");
+  Array.prototype.forEach.call(chips, function(chip){
+    chip.classList.toggle("active", String(chip.getAttribute(attribute)) === String(value));
+  });
+}
+
+function syncSearchControls(){
+  setActiveChip("#sortbar", "data-order", ST.order);
+  setActiveChip("#typebar", "data-type", ST.type);
+  setActiveChip("#durbar", "data-dur", ST.duration);
+}
+
+function hasMoreResults(){
+  if(ST.totalPage > 0) return ST.page < ST.totalPage;
+  if(ST.total > 0) return ST.items.length < ST.total;
+  return ST.page < 100 && ST.items.length >= ST.page * 20;
+}
+
+function restoreSearchState(snapshot){
+  if(!snapshot) return false;
+  ST.q = snapshot.q;
+  ST.page = Number(snapshot.page) || 1;
+  ST.totalPage = Number(snapshot.totalPage) || 0;
+  ST.total = Number(snapshot.total) || 0;
+  ST.order = snapshot.order;
+  ST.type = snapshot.type;
+  ST.duration = Number(snapshot.duration) || 0;
+  ST.items = snapshot.items.slice(0, MAX_RESTORED_ITEMS);
+  ST.seen = {};
+  ST.items.forEach(function(item){ ST.seen[item.bvid] = true; });
+  q.value = ST.q;
+  syncSearchControls();
+  render(ST.items, false, true);
+  setMore(hasMoreResults() ? "more" : "end");
+  status.className = "status";
+  status.textContent = ST.total ? ST.items.length + " / " + ST.total + " · p" + ST.page :
+    ST.items.length + " results · p" + ST.page + " · 已恢复";
+  writeParams();
+  requestAnimationFrame(function(){
+    setTimeout(function(){
+      window.scrollTo(0, Math.max(0, Number(snapshot.scrollY) || 0));
+    }, 60);
+  });
+  return true;
+}
+
+function loadPagesThrough(targetPage){
+  var chain = Promise.resolve(true);
+  for(var page=1; page<=targetPage; page++){
+    (function(currentPage){
+      chain = chain.then(function(ok){
+        if(ok === false) return false;
+        return fetchPage(currentPage, currentPage > 1);
+      });
+    })(page);
+  }
+  return chain;
 }
 
 function setMore(mode){
@@ -482,99 +629,115 @@ function enterCard(el, delay){
 }
 
 function fetchPage(page, append){
-  if(ST.loading)return;
-  ST.loading=true;
+  if(ST.loading) return Promise.resolve(false);
+  ST.loading = true;
   if(!append){
-    list.innerHTML="";
-    status.className="status active";
-    status.innerHTML='<span class="dot"></span><span class="dot"></span><span class="dot"></span>searching';
-    moreWrap.innerHTML="";
+    list.innerHTML = "";
+    ST.items = [];
+    ST.seen = {};
+    status.className = "status active";
+    status.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>searching';
+    moreWrap.innerHTML = "";
   }else{
     setMore("loading");
   }
 
-  fetch("/api/search?q="+encodeURIComponent(ST.q)+"&page="+page+"&order="+ST.order
-      +"&type="+ST.type+"&duration="+ST.duration)
-    .then(function(r){return r.json()})
+  var url = "/api/search?q=" + encodeURIComponent(ST.q) + "&page=" + page +
+    "&order=" + encodeURIComponent(ST.order) + "&type=" + encodeURIComponent(ST.type) +
+    "&duration=" + ST.duration;
+  return fetch(url)
+    .then(function(r){ return r.json(); })
     .then(function(j){
-      ST.loading=false;
-      if(j.code!==0)throw new Error(j.message||("code "+j.code));
-      var d=j.data||{};
-      var items=d.result||[];
-      var numPages=d.numPages||d.pages||0;
-      var numResults=d.numResults||d.total||0;
-      ST.page=page; ST.totalPage=numPages; ST.total=numResults;
+      ST.loading = false;
+      if(j.code !== 0) throw new Error(j.message || ("code " + j.code));
+      var d = j.data || {};
+      var items = Array.isArray(d.result) ? d.result : [];
+      ST.page = page;
+      ST.totalPage = Number(d.numPages || d.pages || 0) || 0;
+      ST.total = Number(d.numResults || d.total || 0) || 0;
       writeParams();
 
-      render(items, append);
-
-      var loaded=list.children.length;
-      var hasMore;
-      if(ST.totalPage>0) hasMore = ST.page < ST.totalPage;
-      else if(ST.total>0) hasMore = loaded < ST.total;
-      else hasMore = items.length>=20;
-
-      if(hasMore) setMore("more");
+      var freshItems = [];
+      items.forEach(function(raw){
+        var item = safeSearchItem(raw);
+        if(!item || ST.seen[item.bvid]) return;
+        ST.seen[item.bvid] = true;
+        ST.items.push(item);
+        freshItems.push(item);
+      });
+      render(freshItems, append);
+      var loaded = ST.items.length;
+      if(hasMoreResults()) setMore("more");
       else setMore("end");
 
-      status.className="status";
-      if(ST.total>0) status.textContent = loaded+" / "+ST.total+" · p"+ST.page;
-      else status.textContent = loaded+" results · p"+ST.page;
+      status.className = "status";
+      if(ST.total > 0) status.textContent = loaded + " / " + ST.total + " · p" + ST.page;
+      else status.textContent = loaded + " results · p" + ST.page;
+      saveSearchState(window.pageYOffset || 0);
+      return true;
     })
     .catch(function(e){
-      ST.loading=false;
-      status.className="status";
-      status.textContent="error · "+e.message;
+      ST.loading = false;
+      status.className = "status";
+      status.textContent = "error · " + e.message;
       if(append) setMore("error");
-      else list.innerHTML='<div class="empty">搜索失败</div>';
+      else list.innerHTML = '<div class="empty">搜索失败</div>';
+      return false;
     });
 }
 
-function render(items, append){
-  if(!append) list.innerHTML="";
+function render(items, append, instant){
+  if(!append) list.innerHTML = "";
   if(!items.length && !append){
-      var emptyMsg = 'NO RESULT';
-      if(ST.type === 'media_bangumi') emptyMsg = '该关键词在番剧区无结果 · 试试更短的名字';
-      else if(ST.type === 'media_ft') emptyMsg = '该关键词在影视区无结果 · 试试更短的名字';
-      else if(ST.duration) emptyMsg = '该时长范围内无结果 · 试试「全部时长」';
-      list.innerHTML='<div class="empty">'+emptyMsg+'</div>';
-      return;
+    var emptyMsg = "NO RESULT";
+    if(ST.type === "media_bangumi") emptyMsg = "该关键词在番剧区无结果 · 试试更短的名字";
+    else if(ST.type === "media_ft") emptyMsg = "该关键词在影视区无结果 · 试试更短的名字";
+    else if(ST.duration) emptyMsg = "该时长范围内无结果 · 试试「全部时长」";
+    list.innerHTML = '<div class="empty">' + emptyMsg + '</div>';
+    return;
   }
   var base = list.children.length;
   items.forEach(function(v,i){
-    var a=document.createElement("a");
-    a.className="card";
-    a.href="/play/"+v.bvid;
-    var pic=v.pic||""; if(pic.indexOf("//")===0)pic="https:"+pic;
-    a.innerHTML=
-      '<div class="thumb">'+
-        (pic?'<img src="/api/img?u='+encodeURIComponent(pic)+'" loading="lazy" onerror="this.style.display=\'none\'">':"")+
-        '<span class="dur">'+esc(v.duration||"")+'</span>'+
-      '</div>'+
-      '<div class="meta"><div class="title">'+esc(stripEm(v.title))+'</div>'+
-      '<div class="sub"><b>'+esc(v.author||"?")+'</b>'+esc(String(v.play||0))+' 播放</div></div>';
+    var a = document.createElement("a");
+    a.className = "card";
+    a.href = "/play/" + encodeURIComponent(v.bvid);
+    var pic = v.pic || "";
+    if(pic.indexOf("//") === 0) pic = "https:" + pic;
+    a.innerHTML =
+      '<div class="thumb">' +
+        (pic ? '<img src="/api/img?u=' + encodeURIComponent(pic) + '" loading="lazy" onerror="this.style.display=\'none\'">' : "") +
+        '<span class="dur">' + esc(v.duration || "") + '</span>' +
+      '</div>' +
+      '<div class="meta"><div class="title">' + esc(stripEm(v.title)) + '</div>' +
+      '<div class="sub"><b>' + esc(v.author || "?") + '</b>' + esc(String(v.play || 0)) + ' 播放</div></div>';
+    a.addEventListener("click", function(){
+      saveSearchState(window.pageYOffset || 0);
+    });
     bindPress(a);
     list.appendChild(a);
 
-    /* 弹簧入场：前 14 张做弹簧，其余直接显示（性能） */
-    if(base+i < 14){
-      enterCard(a, i*32);
-    }else{
-      a.style.opacity="1";
-      a.style.transform="none";
+    if(!instant && base+i < 14) enterCard(a, i*32);
+    else {
+      a.style.opacity = "1";
+      a.style.transform = "none";
     }
   });
 }
 
 function newSearch(){
-  var kw=q.value.trim();
+  var kw = q.value.trim();
   if(!kw){
-    status.className="status";
-    status.textContent="请输入关键词";
+    status.className = "status";
+    status.textContent = "请输入关键词";
     return;
   }
-  ST.q=kw; ST.page=0; ST.totalPage=0; ST.total=0;
-  fetchPage(1,false);
+  ST.q = kw;
+  ST.page = 0;
+  ST.totalPage = 0;
+  ST.total = 0;
+  ST.items = [];
+  ST.seen = {};
+  fetchPage(1, false);
 }
 
 go.addEventListener("click",function(e){e.preventDefault();newSearch()});
@@ -582,25 +745,25 @@ q.addEventListener("keydown",function(e){
   if(e.key==="Enter"){e.preventDefault();newSearch()}
 });
 
-/* 初始：URL 有 q 才搜，否则停在欢迎态 */
-var p=readParams();
-if(p.q) q.value=p.q;
-ST.q=p.q||"";
-if(p.q && p.page && p.page>1){
-  var target=p.page, loaded=0;
-  (function step(){
-    loaded++;
-    if(loaded>target) return;
-    ST.loading=false;
-    fetchPage(loaded, loaded>1);
-    if(loaded<target) setTimeout(step, 700);
-  })();
-}else if(p.q){
-  fetchPage(1,false);
+/* 初始：优先恢复本标签页的搜索结果和滚动位置；没有快照时再请求 API。 */
+var p = readParams();
+if(p.q) q.value = p.q;
+ST.q = p.q || "";
+ST.order = p.order;
+ST.type = p.type;
+ST.duration = p.duration;
+syncSearchControls();
+
+if(p.q){
+  var cachedSearch = readSearchState(p);
+  if(!restoreSearchState(cachedSearch)){
+    if(p.page > 1) loadPagesThrough(p.page);
+    else fetchPage(1, false);
+  }
 }else{
-  status.className="status";
-  status.textContent="ready · 输入关键词开始搜索";
-  list.innerHTML='<div class="empty">TYPE TO SEARCH</div>';
+  status.className = "status";
+  status.textContent = "ready · 输入关键词开始搜索";
+  list.innerHTML = '<div class="empty">TYPE TO SEARCH</div>';
 }
 
 })();

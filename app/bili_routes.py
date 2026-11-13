@@ -4,6 +4,9 @@
 import os
 import json
 import time
+import copy
+import threading
+from collections import OrderedDict
 import subprocess
 import tempfile
 import urllib.parse
@@ -21,6 +24,10 @@ bili_bp = Blueprint('bili', __name__)
 
 _MAX_SEARCH_KEYWORD_CHARS = 100
 _MAX_SEARCH_PAGE = 100
+_SEARCH_CACHE_TTL = 45
+_SEARCH_CACHE_MAX = 96
+_SEARCH_CACHE_LOCK = threading.RLock()
+_SEARCH_CACHE = OrderedDict()
 _MAX_AUDIO_BYTES = 128 * 1024 * 1024
 _MAX_PROXY_IMAGE_BYTES = 5 * 1024 * 1024
 _MEDIA_HOSTS = ("bilivideo.com", "bilivideo.cn", "hdslb.com", "bilibili.com")
@@ -30,6 +37,32 @@ def _safe_unlink(path):
         os.unlink(path)
     except OSError:
         pass
+
+def _search_cache_get(key):
+    now = time.monotonic()
+    with _SEARCH_CACHE_LOCK:
+        entry = _SEARCH_CACHE.get(key)
+        if entry is None:
+            return None
+        expires_at, payload = entry
+        if now >= expires_at:
+            _SEARCH_CACHE.pop(key, None)
+            return None
+        _SEARCH_CACHE.move_to_end(key)
+        return copy.deepcopy(payload)
+
+
+def _search_cache_set(key, payload):
+    with _SEARCH_CACHE_LOCK:
+        _SEARCH_CACHE[key] = (time.monotonic() + _SEARCH_CACHE_TTL, copy.deepcopy(payload))
+        _SEARCH_CACHE.move_to_end(key)
+        while len(_SEARCH_CACHE) > _SEARCH_CACHE_MAX:
+            _SEARCH_CACHE.popitem(last=False)
+
+
+def _search_cache_clear():
+    with _SEARCH_CACHE_LOCK:
+        _SEARCH_CACHE.clear()
 
 @bili_bp.route("/api/suggest")
 def api_suggest():
@@ -75,17 +108,17 @@ def api_suggest():
 
 @bili_bp.route("/api/search")
 def api_search():
-    q=request.args.get("q","").strip()
+    q = request.args.get("q", "").strip()
     if not q:
-        return jsonify({"code":-1,"message":"空关键词"})
+        return jsonify({"code": -1, "message": "空关键词"})
     if len(q) > _MAX_SEARCH_KEYWORD_CHARS:
-        return jsonify({"code":-1,"message":"关键词不能超过100个字符"}), 400
+        return jsonify({"code": -1, "message": "关键词不能超过100个字符"}), 400
     try:
         page = int(request.args.get("page", 1))
     except (TypeError, ValueError):
-        return jsonify({"code":-1,"message":"页码必须是整数"}), 400
+        return jsonify({"code": -1, "message": "页码必须是整数"}), 400
     if not 1 <= page <= _MAX_SEARCH_PAGE:
-        return jsonify({"code":-1,"message":"页码范围为1–100"}), 400
+        return jsonify({"code": -1, "message": "页码范围为1–100"}), 400
     order = request.args.get("order", "totalrank")
     if order not in ("totalrank", "click", "pubdate", "dm", "stow"):
         order = "totalrank"
@@ -95,24 +128,43 @@ def api_search():
     try:
         duration = int(request.args.get("duration", 0))
     except (TypeError, ValueError):
-        return jsonify({"code":-1,"message":"时长筛选必须是整数"}), 400
+        return jsonify({"code": -1, "message": "时长筛选必须是整数"}), 400
     if duration not in (0, 1, 2, 3, 4):
-        return jsonify({"code":-1,"message":"无效的时长筛选"}), 400
+        return jsonify({"code": -1, "message": "无效的时长筛选"}), 400
+
+    cache_key = (q, page, order, search_type, duration)
+    cached = _search_cache_get(cache_key)
+    if cached is not None:
+        try:
+            db_history_add(q)
+        except Exception:
+            pass
+        _metric_inc("search_ok")
+        _metric_inc("search_cache_hit")
+        return jsonify(cached)
+
     try:
         data = client.search(q, page, order, search_type, duration)
-        if data.get("code") == 0:
-            try: db_history_add(q)
-            except Exception: pass
+        if isinstance(data, dict) and data.get("code") == 0:
+            try:
+                db_history_add(q)
+            except Exception:
+                pass
             _metric_inc("search_ok")
-        if data.get("code") == -352:
+            _search_cache_set(cache_key, data)
+        if isinstance(data, dict) and data.get("code") == -352:
             _metric_inc("search_352")
-        if data.get("code") != 0:
-            logger.warning("[SEARCH_FAIL] q=%s page=%d code=%s msg=%s",
-                               q, page, data.get("code"), data.get("message"))
+        if not isinstance(data, dict) or data.get("code") != 0:
+            code = data.get("code") if isinstance(data, dict) else "invalid-response"
+            message = data.get("message", "") if isinstance(data, dict) else ""
+            logger.warning(
+                "[SEARCH_FAIL] q=%s page=%d code=%s msg=%s",
+                q, page, code, message
+            )
         return jsonify(data)
-    except Exception as e:
+    except Exception:
         logger.exception("[SEARCH_EXC] q=%s page=%d", q, page)
-        return jsonify({"code":-500,"message":str(e)})
+        return jsonify({"code": -500, "message": "搜索服务暂时不可用，请稍后重试"}), 502
 
 @bili_bp.route("/api/pages")
 def api_pages():

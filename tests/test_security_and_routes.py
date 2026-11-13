@@ -67,11 +67,12 @@ class RouteTests(unittest.TestCase):
         self.app.register_blueprint(workspace_bp)
         self.client = self.app.test_client()
 
-    def test_search_exception_returns_500_json_without_logger_nameerror(self):
-        with patch("app.bili_routes.client.search", side_effect=RuntimeError("offline")):
+    def test_search_exception_returns_gateway_error_without_leaking_exception(self):
+        with patch("app.bili_routes.client.search", side_effect=RuntimeError("private upstream detail")):
             response = self.client.get("/api/search?q=test")
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 502)
         self.assertEqual(response.get_json()["code"], -500)
+        self.assertNotIn("private upstream detail", response.get_data(as_text=True))
 
     def test_workspace_rejects_unknown_or_non_string_edit_modes(self):
         for mode in ("unexpected", " auto ", 123, None, []):

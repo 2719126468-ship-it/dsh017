@@ -11,6 +11,8 @@ sys.path.insert(0, str(ROOT))
 
 from app.chat_ui import CHAT_HTML
 from app.providers import PROVIDERS_HTML
+from app.misc_routes import HTML as BILI_HTML
+from app.play_routes import PLAY_HTML
 
 node = shutil.which("node")
 if not node:
@@ -39,6 +41,8 @@ if not shorts_match:
     raise SystemExit("Could not locate Shorts inline script")
 
 scripts = [("Shorts inline script", shorts_match.group(1))]
+scripts.extend(scripts_from_html("Bilibili search UI", BILI_HTML))
+scripts.extend(scripts_from_html("Bilibili player UI", PLAY_HTML))
 scripts.extend(scripts_from_html("Chat UI", CHAT_HTML))
 scripts.extend(scripts_from_html("Provider UI", PROVIDERS_HTML))
 
