@@ -42,6 +42,8 @@ public class MainActivity extends Activity {
     private static final String[] LOCAL_PORTS = {"8080", "8084", "8091", "8092"};
     private static final int REQUEST_EXPORT_BACKUP = 7101;
     private static final int REQUEST_IMPORT_BACKUP = 7102;
+    // The archive format caps payload data at 512 MiB; leave room for tar headers and manifest.
+    private static final long MAX_IMPORT_ARCHIVE_BYTES = 520L * 1024L * 1024L;
 
     private final ExecutorService backendExecutor = Executors.newSingleThreadExecutor();
     private WebView webView;
@@ -160,7 +162,14 @@ public class MainActivity extends Activity {
                     if (input == null) throw new IOException("无法读取所选备份文件");
                     byte[] buffer = new byte[8192];
                     int read;
-                    while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+                    long totalBytes = 0L;
+                    while ((read = input.read(buffer)) != -1) {
+                        if (totalBytes > MAX_IMPORT_ARCHIVE_BYTES - read) {
+                            throw new IOException("迁移包超过 520 MiB 限制");
+                        }
+                        totalBytes += read;
+                        output.write(buffer, 0, read);
+                    }
                     output.getFD().sync();
                 }
                 File dataDir = new File(getFilesDir(), "dsh017");
@@ -205,6 +214,8 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "迁移包已保存。请保留旧版应用，直到新版本数据核对完成。", Toast.LENGTH_LONG).show();
         } catch (Exception error) {
             Toast.makeText(this, "保存迁移包失败：" + shortError(error), Toast.LENGTH_LONG).show();
+        } finally {
+            if (archive.exists()) archive.delete();
         }
     }
 
@@ -215,7 +226,9 @@ public class MainActivity extends Activity {
             if (resultCode == RESULT_OK && data != null && data.getData() != null) {
                 saveExportToUri(data.getData());
             } else {
+                File archive = pendingExportFile;
                 pendingExportFile = null;
+                if (archive != null && archive.exists()) archive.delete();
                 Toast.makeText(this, "已取消保存迁移包", Toast.LENGTH_SHORT).show();
             }
             return;
