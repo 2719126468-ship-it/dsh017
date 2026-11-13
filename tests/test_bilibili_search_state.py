@@ -10,6 +10,7 @@ class BilibiliSearchStateTests(unittest.TestCase):
         source = (ROOT / "app" / "misc_routes.py").read_text(encoding="utf-8")
         self.assertIn('sessionStorage.setItem(SEARCH_STATE_KEY', source)
         self.assertIn('sessionStorage.getItem(SEARCH_STATE_KEY', source)
+        self.assertIn('page: Math.min(ST.page, Math.ceil(savedItems.length / 20))', source)
         self.assertIn('render(ST.items, false, true)', source)
         self.assertIn('window.scrollTo(0, Math.max(0, Number(snapshot.scrollY) || 0))', source)
         self.assertIn('a.addEventListener("click", function(){', source)
