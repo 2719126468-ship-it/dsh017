@@ -1,3 +1,5 @@
+import argparse
+import importlib.util
 import json
 from pathlib import Path
 import sqlite3
@@ -7,6 +9,7 @@ import tarfile
 import tempfile
 import unittest
 import io
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -198,6 +201,38 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
         )
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "do not overwrite")
         self.assertEqual(list(restored_presets.iterdir()), [])
+
+    def test_restore_rolls_back_a_partially_written_preset(self):
+        archive_path = self.create_backup()
+        restored_data = self.root / "android-preset-failure" / "dsh017"
+        restored_presets = restored_data / "presets"
+        restored_presets.mkdir(parents=True)
+
+        spec = importlib.util.spec_from_file_location("dsh017_backup_restore_test", TOOL)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        original_copy = module.shutil.copyfileobj
+
+        def fail_during_writing_preset(source, destination, length=0):
+            if Path(destination.name).name == "Writing.txt":
+                destination.write(b"partial preset content")
+                raise OSError("simulated preset write failure")
+            return original_copy(source, destination, length)
+
+        args = argparse.Namespace(
+            archive=str(archive_path),
+            data_dir=str(restored_data),
+            preset_dir=str(restored_presets),
+            db_name="bili_data.db",
+        )
+        with patch.object(module.shutil, "copyfileobj", side_effect=fail_during_writing_preset):
+            with self.assertRaises(module.BackupError):
+                module._restore(args)
+
+        self.assertEqual(list(restored_presets.iterdir()), [])
+        self.assertEqual([item.name for item in restored_data.iterdir()], ["presets"])
+        self.assertFalse((restored_data / "bili_data.db").exists())
+        self.assertFalse((restored_data / "providers.json").exists())
 
     def test_corrupt_archive_is_rejected_without_creating_destination(self):
         archive_path = self.create_backup()
