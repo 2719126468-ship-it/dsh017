@@ -3,12 +3,14 @@ package com.dsh017.android;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.webkit.DownloadListener;
 import android.webkit.HttpAuthHandler;
@@ -21,6 +23,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -47,6 +50,12 @@ public class MainActivity extends Activity {
     private boolean backendReady = false;
     private boolean starting = false;
     private ApiKeyStore apiKeyStore;
+    private View fullscreenView;
+    private FrameLayout fullscreenContainer;
+    private WebChromeClient.CustomViewCallback fullscreenCallback;
+    private int previousRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+    private int previousSystemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE;
+    private boolean previousFullscreenWindowFlag = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -151,6 +160,16 @@ public class MainActivity extends Activity {
                 progressBar.setProgress(progress);
                 progressBar.setVisibility(progress >= 100 ? View.GONE : View.VISIBLE);
             }
+
+            @Override
+            public void onShowCustomView(View view, CustomViewCallback callback) {
+                showFullscreenView(view, callback);
+            }
+
+            @Override
+            public void onHideCustomView() {
+                hideFullscreenView();
+            }
         });
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -193,6 +212,82 @@ public class MainActivity extends Activity {
             }
         });
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
+    }
+
+    private void showFullscreenView(View view, WebChromeClient.CustomViewCallback callback) {
+        if (view == null) {
+            if (callback != null) callback.onCustomViewHidden();
+            return;
+        }
+        if (fullscreenView != null) {
+            if (callback != null) callback.onCustomViewHidden();
+            return;
+        }
+
+        fullscreenView = view;
+        fullscreenCallback = callback;
+        previousRequestedOrientation = getRequestedOrientation();
+        View decorView = getWindow().getDecorView();
+        previousSystemUiVisibility = decorView.getSystemUiVisibility();
+        previousFullscreenWindowFlag =
+                (getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_FULLSCREEN) != 0;
+
+        FrameLayout decor = (FrameLayout) decorView;
+        fullscreenContainer = new FrameLayout(this);
+        fullscreenContainer.setBackgroundColor(Color.BLACK);
+        fullscreenContainer.addView(
+                view,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                )
+        );
+        decor.addView(
+                fullscreenContainer,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                )
+        );
+
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        decorView.setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
+    }
+
+    private void hideFullscreenView() {
+        if (fullscreenView == null) return;
+
+        View oldView = fullscreenView;
+        FrameLayout oldContainer = fullscreenContainer;
+        WebChromeClient.CustomViewCallback oldCallback = fullscreenCallback;
+        fullscreenView = null;
+        fullscreenContainer = null;
+        fullscreenCallback = null;
+
+        FrameLayout decor = (FrameLayout) getWindow().getDecorView();
+        if (oldContainer != null) {
+            decor.removeView(oldContainer);
+            if (oldView != null && oldView.getParent() == oldContainer) {
+                oldContainer.removeView(oldView);
+            }
+        }
+
+        View decorView = getWindow().getDecorView();
+        decorView.setSystemUiVisibility(previousSystemUiVisibility);
+        if (!previousFullscreenWindowFlag) {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        }
+        setRequestedOrientation(previousRequestedOrientation);
+
+        if (oldCallback != null) oldCallback.onCustomViewHidden();
     }
 
     private boolean routeNavigation(Uri uri) {
@@ -383,6 +478,10 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (fullscreenView != null) {
+            hideFullscreenView();
+            return;
+        }
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
@@ -408,6 +507,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (fullscreenView != null) hideFullscreenView();
         if (webView != null) {
             webView.stopLoading();
             webView.loadUrl("about:blank");
