@@ -115,8 +115,11 @@ html,body{background:var(--bg);color:var(--text);
         return;
       }
       var target = playerElement || v;
-      var request = target.requestFullscreen || target.webkitRequestFullscreen ||
-        v.requestFullscreen || v.webkitRequestFullscreen;
+      var request = target.requestFullscreen || target.webkitRequestFullscreen;
+      if(!request){
+        target = v;
+        request = v.requestFullscreen || v.webkitRequestFullscreen;
+      }
       if(request){
         var result = request.call(target);
         if(result && typeof result.catch === "function") result.catch(function(){});
