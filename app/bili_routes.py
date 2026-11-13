@@ -31,6 +31,14 @@ def _safe_unlink(path):
     except OSError:
         pass
 
+def _upstream_unavailable(endpoint):
+    """Log internal upstream details while returning a stable public error."""
+    logger.exception("[BILI_UPSTREAM_FAIL] endpoint=%s", endpoint)
+    return jsonify({
+        "code": -502,
+        "message": "Bilibili 服务暂时不可用，请稍后重试",
+    }), 502
+
 @bili_bp.route("/api/suggest")
 def api_suggest():
     q = request.args.get("q", "").strip()
@@ -69,8 +77,8 @@ def api_suggest():
                         name = _clean(name)
                         if name: items.append(name)
         return jsonify({"code": 0, "items": items[:10]})
-    except Exception as e:
-        return jsonify({"code": -500, "message": str(e)})
+    except Exception:
+        return _upstream_unavailable("suggest")
 
 
 @bili_bp.route("/api/search")
@@ -132,8 +140,8 @@ def api_pages():
                         "part": pg.get("part", ""), "duration": pg.get("duration", 0)})
         return jsonify({"code": 0, "bvid": bvid, "title": d["title"],
                         "author": d["owner"]["name"], "pages": out})
-    except Exception as e:
-        return jsonify({"code": -500, "message": str(e)})
+    except Exception:
+        return _upstream_unavailable("pages")
 
 @bili_bp.route("/api/playurl")
 def api_playurl():
@@ -188,8 +196,8 @@ def api_playurl():
             "size": total_size}
         _playurl_cache_set(cache_key, result)
         return jsonify(result)
-    except Exception as e:
-        return jsonify({"code":-500,"message":str(e)})
+    except Exception:
+        return _upstream_unavailable("playurl")
 
 @bili_bp.route("/api/audio")
 def api_audio():
