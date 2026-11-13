@@ -31,6 +31,15 @@ html,body{background:var(--bg);color:var(--text);
   font-family:-apple-system,"Noto Sans SC",sans-serif;letter-spacing:-.02em}
 .player{position:relative;width:100%;background:#000;aspect-ratio:16/9}
 .player video{width:100%;height:100%;display:block;background:#000}
+.player:fullscreen,.player:-webkit-full-screen{
+  width:100vw;height:100vh;max-width:none;aspect-ratio:auto;
+  display:flex;align-items:center;justify-content:center;
+}
+.player:fullscreen video,.player:-webkit-full-screen video{
+  width:100%;height:100%;max-height:100vh;object-fit:contain;
+}
+.fullscreen-note{color:var(--muted);font-size:11px;padding:0 16px 10px}
+
 .loading{position:absolute;inset:0;display:flex;align-items:center;
   justify-content:center;font-family:monospace;font-size:11px;
   letter-spacing:.14em;text-transform:uppercase;color:var(--clay)}
@@ -81,6 +90,7 @@ html,body{background:var(--bg);color:var(--text);
 <div id="pages"></div>
 <div class="info" id="info"></div>
 <div class="dlrow">
+  <a class="dlbtn v" href="javascript:void(0)" id="fullscreenBtn" aria-label="横屏全屏观看">⛶ 横屏全屏</a>
   <a class="dlbtn v" href="#" id="aiSumBtn" style="color:#4d6bfe;border-color:rgba(77,107,254,.4)">✦ AI 总结</a>
   <a class="dlbtn v" href="#" id="dlVideo">⬇ 下载视频</a>
   <a class="dlbtn a" href="#" id="dlAudio">⬇ 下载音频</a>
@@ -95,6 +105,48 @@ html,body{background:var(--bg);color:var(--text);
   var currentCid = null, currentPageIdx = 0, pages = [];
   var _segments = null, _segIdx = 0;
   var _retry = 0;
+  var fullscreenBtn = document.getElementById("fullscreenBtn");
+  var playerElement = document.querySelector(".player");
+
+  function enterPlayerFullscreen(){
+    try{
+      if(typeof v.webkitEnterFullscreen === "function"){
+        v.webkitEnterFullscreen();
+        return;
+      }
+      var target = playerElement || v;
+      var request = target.requestFullscreen || target.webkitRequestFullscreen ||
+        v.requestFullscreen || v.webkitRequestFullscreen;
+      if(request){
+        var result = request.call(target);
+        if(result && typeof result.catch === "function") result.catch(function(){});
+        return;
+      }
+      info.innerHTML = '<div class="err">当前 WebView 不支持全屏播放，请使用视频控制栏的全屏按钮。</div>';
+    }catch(error){
+      info.innerHTML = '<div class="err">无法进入全屏：' + esc(error.message) + '</div>';
+    }
+  }
+
+  if(fullscreenBtn){
+    fullscreenBtn.addEventListener("click", function(event){
+      event.preventDefault();
+      enterPlayerFullscreen();
+    });
+  }
+  function syncFullscreenButton(){
+    if(!fullscreenBtn) return;
+    var active = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    fullscreenBtn.textContent = active ? "⛶ 退出全屏" : "⛶ 横屏全屏";
+  }
+  document.addEventListener("fullscreenchange", syncFullscreenButton);
+  document.addEventListener("webkitfullscreenchange", syncFullscreenButton);
+  v.addEventListener("webkitbeginfullscreen", function(){
+    if(fullscreenBtn) fullscreenBtn.textContent = "⛶ 退出全屏";
+  });
+  v.addEventListener("webkitendfullscreen", function(){
+    if(fullscreenBtn) fullscreenBtn.textContent = "⛶ 横屏全屏";
+  });
 
   function esc(s){return(s||"").replace(/[&<>"]/g,function(c){
     return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
