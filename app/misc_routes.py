@@ -9,34 +9,74 @@ misc_bp = Blueprint("misc", __name__)
 
 _START_TS = int(time.time())
 
+def _database_probe():
+    """Return whether the local SQLite database can execute a trivial query."""
+    connection = None
+    try:
+        with _DB_LOCK:
+            connection = _db_conn()
+            connection.execute("SELECT 1").fetchone()
+        return True
+    except Exception:
+        return False
+    finally:
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
+
 @misc_bp.route("/health")
 def health():
+    # Liveness only: keep this independent from SQLite so an unhealthy DB
+    # does not cause an orchestrator to repeatedly restart a live process.
     import multiprocessing
     cpu = multiprocessing.cpu_count() or 4
     return jsonify({"status": "ok", "service": "bili", "port": 8092,
                     "cpu": cpu, "threads": max(4, cpu * 2)})
 
+
+@misc_bp.route("/ready")
+def ready():
+    # Readiness is separate from liveness and reports database failures.
+    database_ok = _database_probe()
+    payload = {"status": "ready" if database_ok else "not_ready",
+               "service": "bili", "database": "ok" if database_ok else "unavailable"}
+    return jsonify(payload), (200 if database_ok else 503)
+
+
 @misc_bp.route("/metrics")
 def metrics():
-    # 从 SQLite 读今日统计
-    today_start = int(time.time()) - 86400
-    daily = {"fav_total": 0, "progress_total": 0, "history_total": 0}
+    connection = None
+    daily = None
+    database_status = "unavailable"
     try:
         with _DB_LOCK:
-            c = _db_conn()
-            daily["fav_total"] = c.execute(
-                "SELECT COUNT(*) AS n FROM favorites").fetchone()["n"]
-            daily["progress_total"] = c.execute(
-                "SELECT COUNT(*) AS n FROM watch_progress").fetchone()["n"]
-            daily["history_total"] = c.execute(
-                "SELECT COUNT(*) AS n FROM search_history").fetchone()["n"]
-            c.close()
+            connection = _db_conn()
+            daily = {
+                "fav_total": connection.execute(
+                    "SELECT COUNT(*) AS n FROM favorites").fetchone()["n"],
+                "progress_total": connection.execute(
+                    "SELECT COUNT(*) AS n FROM watch_progress").fetchone()["n"],
+                "history_total": connection.execute(
+                    "SELECT COUNT(*) AS n FROM search_history").fetchone()["n"],
+            }
+        database_status = "ok"
     except Exception:
-        pass
+        # Do not report failed database reads as legitimate zero counts.
+        daily = None
+    finally:
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:
+                pass
     with _METRICS_LOCK:
         counters = dict(_METRICS)
     return jsonify({"status": "ok", "service": "bili", "port": 8092,
                     "uptime": int(time.time()) - _START_TS,
+                    "database": database_status,
                     "counters": counters, "daily": daily})
 
 FAV_HTML = r"""<!DOCTYPE html>
