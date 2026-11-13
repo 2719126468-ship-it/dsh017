@@ -303,9 +303,21 @@ def _restore(args) -> tuple[Path, Path]:
                     copied.append(target)
                 for item in staged_presets.iterdir():
                     target = preset_dir / item.name
-                    with item.open("rb") as source, target.open("xb") as output:
-                        shutil.copyfileobj(source, output)
-                    os.chmod(target, 0o600)
+                    target_created = False
+                    try:
+                        with item.open("rb") as source:
+                            with target.open("xb") as output:
+                                target_created = True
+                                shutil.copyfileobj(source, output)
+                        os.chmod(target, 0o600)
+                    except Exception:
+                        # Presets need the same partial-write rollback as data files.
+                        if target_created:
+                            try:
+                                target.unlink()
+                            except OSError:
+                                pass
+                        raise
                     copied.append(target)
             except Exception:
                 for target in reversed(copied):
