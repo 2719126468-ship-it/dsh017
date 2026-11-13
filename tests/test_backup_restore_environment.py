@@ -34,7 +34,7 @@ class BackupRestoreEnvironmentTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_tool(self, command, *, env, *args):
+    def run_tool(self, command, *args, env):
         return subprocess.run(
             [sys.executable, str(TOOL), command, *map(str, args)],
             cwd=ROOT,
