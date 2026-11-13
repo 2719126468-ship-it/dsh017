@@ -64,11 +64,11 @@ class BackupRestoreEnvironmentTests(unittest.TestCase):
         restored_presets = self.root / "recovered presets"
         restore = self.run_tool(
             "restore",
-            env=env,
             "--archive", archive_path,
             "--data-dir", restored_data,
             "--preset-dir", restored_presets,
             "--db-name", self.db_name,
+            env=env,
         )
         self.assertEqual(restore.returncode, 0, restore.stdout + restore.stderr)
 
