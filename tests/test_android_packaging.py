@@ -60,6 +60,14 @@ class AndroidPackagingContractTests(unittest.TestCase):
         self.assertIn("uri.getPort() == 8092", activity)
         self.assertIn("uri.getUserInfo() == null", activity)
 
+    def test_android_saf_import_is_size_bounded_and_export_cache_is_cleaned(self):
+        activity = self.read("app/src/main/java/com/dsh017/android/MainActivity.java")
+        self.assertIn("MAX_IMPORT_ARCHIVE_BYTES = 520L * 1024L * 1024L", activity)
+        self.assertIn("totalBytes > MAX_IMPORT_ARCHIVE_BYTES - read", activity)
+        self.assertIn('throw new IOException("迁移包超过 520 MiB 限制")', activity)
+        self.assertIn("if (archive.exists()) archive.delete();", activity)
+        self.assertIn("if (archive != null && archive.exists()) archive.delete();", activity)
+
     def test_ci_builds_both_installable_variants(self):
         workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
         self.assertIn("assembleArm32Debug", workflow)
