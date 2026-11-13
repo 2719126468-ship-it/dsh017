@@ -33,12 +33,17 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final String START_URL = "http://127.0.0.1:8080/";
     private static final String[] LOCAL_PORTS = {"8080", "8084", "8091", "8092"};
+    private static final int REQUEST_EXPORT_BACKUP = 7101;
+    private static final int REQUEST_IMPORT_BACKUP = 7102;
+    // The archive format caps payload data at 512 MiB; leave room for tar headers and manifest.
+    private static final long MAX_IMPORT_ARCHIVE_BYTES = 520L * 1024L * 1024L;
 
     private final ExecutorService backendExecutor = Executors.newSingleThreadExecutor();
     private WebView webView;
@@ -47,13 +52,194 @@ public class MainActivity extends Activity {
     private boolean backendReady = false;
     private boolean starting = false;
     private ApiKeyStore apiKeyStore;
+    private File pendingExportFile;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         apiKeyStore = new ApiKeyStore(this);
         buildLayout();
-        startBackend();
+        beginStartup();
+    }
+
+    private void beginStartup() {
+        if (!BuildConfig.DEBUG && isFreshInstallDataDirectory()) {
+            showFirstRunMigrationDialog();
+        } else {
+            startBackend();
+        }
+    }
+
+    private boolean isFreshInstallDataDirectory() {
+        File dataDir = new File(getFilesDir(), "dsh017");
+        File presetDir = new File(dataDir, "presets");
+        if (!dataDir.exists()) return true;
+        if (!dataDir.isDirectory()) return false;
+        File[] entries = dataDir.listFiles();
+        if (entries == null) return false;
+        if (entries.length == 0) return true;
+        if (entries.length == 1 && entries[0].equals(presetDir) && presetDir.isDirectory()) {
+            File[] presets = presetDir.listFiles();
+            return presets != null && presets.length == 0;
+        }
+        return false;
+    }
+
+    private void showFirstRunMigrationDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("导入旧版 DSH-017 数据？")
+                .setMessage("如果你从旧 Debug 版升级，请先在旧版中点击“导出迁移包”，再在这里选择备份。聊天、Workspace、预设和 Provider 配置可迁移；API Key、访问 Token 和 Android Keystore 密钥不会导出，需要重新配置。旧版数据不会被删除。")
+                .setPositiveButton("选择备份", (dialog, which) -> chooseImportBackup())
+                .setNegativeButton("不导入，开始使用", (dialog, which) -> startBackend())
+                .setCancelable(false)
+                .show();
+    }
+
+    private void chooseImportBackup() {
+        if (!isFreshInstallDataDirectory()) {
+            Toast.makeText(this, "导入仅允许在新安装且数据目录为空时进行；现有数据不会被覆盖。", Toast.LENGTH_LONG).show();
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(intent, REQUEST_IMPORT_BACKUP);
+    }
+
+    private void beginExportBackup() {
+        if (!backendReady) {
+            Toast.makeText(this, "请等待内置服务启动后再导出", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        statusView.setText("正在生成迁移备份…");
+        backendExecutor.execute(() -> {
+            try {
+                File dataDir = new File(getFilesDir(), "dsh017");
+                File presetDir = new File(dataDir, "presets");
+                File backupDir = new File(getCacheDir(), "dsh017-migration-export");
+                if (!backupDir.exists() && !backupDir.mkdirs()) {
+                    throw new IOException("无法创建临时备份目录");
+                }
+                PyObject migration = Python.getInstance().getModule("android_migration");
+                String archivePath = migration.callAttr(
+                        "create_backup",
+                        dataDir.getAbsolutePath(),
+                        presetDir.getAbsolutePath(),
+                        backupDir.getAbsolutePath()
+                ).toString();
+                File archive = new File(archivePath);
+                if (!archive.isFile() || archive.length() <= 0) {
+                    throw new IOException("备份文件未生成");
+                }
+                runOnUiThread(() -> {
+                    pendingExportFile = archive;
+                    Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("application/gzip");
+                    intent.putExtra(Intent.EXTRA_TITLE, archive.getName());
+                    intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    startActivityForResult(intent, REQUEST_EXPORT_BACKUP);
+                    statusView.setText("迁移包已准备，请选择保存位置");
+                });
+            } catch (Throwable error) {
+                runOnUiThread(() -> {
+                    statusView.setText("备份生成失败");
+                    Toast.makeText(this, "导出失败：" + shortError(error), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    private void importBackup(Uri uri) {
+        statusView.setText("正在读取并验证迁移包…");
+        backendExecutor.execute(() -> {
+            File archive = null;
+            try {
+                archive = File.createTempFile("dsh017-import-", ".tar.gz", getCacheDir());
+                try (InputStream input = getContentResolver().openInputStream(uri);
+                     FileOutputStream output = new FileOutputStream(archive)) {
+                    if (input == null) throw new IOException("无法读取所选备份文件");
+                    byte[] buffer = new byte[8192];
+                    int read;
+                    long totalBytes = 0L;
+                    while ((read = input.read(buffer)) != -1) {
+                        if (totalBytes > MAX_IMPORT_ARCHIVE_BYTES - read) {
+                            throw new IOException("迁移包超过 520 MiB 限制");
+                        }
+                        totalBytes += read;
+                        output.write(buffer, 0, read);
+                    }
+                    output.getFD().sync();
+                }
+                File dataDir = new File(getFilesDir(), "dsh017");
+                File presetDir = new File(dataDir, "presets");
+                PyObject migration = Python.getInstance().getModule("android_migration");
+                migration.callAttr(
+                        "restore_backup",
+                        archive.getAbsolutePath(),
+                        dataDir.getAbsolutePath(),
+                        presetDir.getAbsolutePath()
+                );
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "数据已验证并导入。Provider 凭据需要重新配置。", Toast.LENGTH_LONG).show();
+                    startBackend();
+                });
+            } catch (Throwable error) {
+                runOnUiThread(() -> {
+                    statusView.setText("迁移失败；现有数据未被覆盖");
+                    Toast.makeText(this, "导入失败：" + shortError(error), Toast.LENGTH_LONG).show();
+                    showFirstRunMigrationDialog();
+                });
+            } finally {
+                if (archive != null && archive.exists()) archive.delete();
+            }
+        });
+    }
+
+    private void saveExportToUri(Uri uri) {
+        File archive = pendingExportFile;
+        pendingExportFile = null;
+        if (archive == null || !archive.isFile()) {
+            Toast.makeText(this, "迁移包不存在，请重新导出", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try (InputStream input = new java.io.FileInputStream(archive);
+             OutputStream output = getContentResolver().openOutputStream(uri, "w")) {
+            if (output == null) throw new IOException("无法写入所选位置");
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+            output.flush();
+            Toast.makeText(this, "迁移包已保存。请保留旧版应用，直到新版本数据核对完成。", Toast.LENGTH_LONG).show();
+        } catch (Exception error) {
+            Toast.makeText(this, "保存迁移包失败：" + shortError(error), Toast.LENGTH_LONG).show();
+        } finally {
+            if (archive.exists()) archive.delete();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_EXPORT_BACKUP) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                saveExportToUri(data.getData());
+            } else {
+                File archive = pendingExportFile;
+                pendingExportFile = null;
+                if (archive != null && archive.exists()) archive.delete();
+                Toast.makeText(this, "已取消保存迁移包", Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
+        if (requestCode == REQUEST_IMPORT_BACKUP) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                importBackup(data.getData());
+            } else {
+                showFirstRunMigrationDialog();
+            }
+        }
     }
 
     private void buildLayout() {
@@ -77,6 +263,16 @@ public class MainActivity extends Activity {
         Button keyButton = toolbarButton("API 设置");
         keyButton.setOnClickListener(v -> showApiKeyDialog());
         toolbar.addView(keyButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)));
+
+        Button migrationButton = toolbarButton(BuildConfig.DEBUG ? "导出迁移包" : "导入迁移包");
+        migrationButton.setOnClickListener(v -> {
+            if (BuildConfig.DEBUG) beginExportBackup();
+            else chooseImportBackup();
+        });
+        LinearLayout.LayoutParams migrationParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(36));
+        migrationParams.leftMargin = dp(4);
+        toolbar.addView(migrationButton, migrationParams);
 
         Button reloadButton = toolbarButton("刷新");
         reloadButton.setOnClickListener(v -> {
