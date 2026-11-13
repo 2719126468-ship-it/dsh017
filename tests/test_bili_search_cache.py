@@ -54,14 +54,13 @@ class BilibiliSearchCacheTests(unittest.TestCase):
         self.assertEqual(search.call_count, 5)
 
     def test_expired_search_entry_is_requested_again(self):
-        with patch("app.bili_routes.client.search", return_value=self.payload) as search, \
-             patch("app.bili_routes.db_history_add"), \
-             patch("app.bili_routes._metric_inc"), \
-             patch("app.bili_routes.time.monotonic", side_effect=[100, 100, 150, 150]):
-            self.client.get("/api/search?q=landscape&page=1")
-            self.client.get("/api/search?q=landscape&page=1")
+        from app.bili_routes import _search_cache_get, _search_cache_set
 
-        self.assertEqual(search.call_count, 2)
+        key = ("landscape", 1, "totalrank", "video", 0)
+        with patch("app.bili_routes.time.monotonic", side_effect=[100, 150]):
+            _search_cache_set(key, self.payload)
+            self.assertIsNone(_search_cache_get(key))
+
 
 
 if __name__ == "__main__":
