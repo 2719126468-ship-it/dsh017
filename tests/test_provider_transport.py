@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 from app.provider_transport import (
     ProviderTarget,
+    ProviderResponse,
     _PinnedHTTPSConnection,
     _PinnedHTTPConnection,
     provider_request,
@@ -159,6 +160,66 @@ class ProviderTransportTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=2)
+
+
+    def test_provider_request_rejects_header_injection_before_sending(self):
+        class Handler(BaseHTTPRequestHandler):
+            hits = 0
+
+            def do_GET(self):
+                type(self).hits += 1
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def log_message(self, *_args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = "http://127.0.0.1:%d" % server.server_port
+        try:
+            with self.assertRaises(ValueError):
+                provider_request(
+                    "GET",
+                    base + "/models",
+                    headers={"Authorization": "Bearer safe\r\nX-Injected: yes"},
+                    timeout=(2, 2),
+                )
+            self.assertEqual(Handler.hits, 0)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_provider_response_text_and_json_reads_are_bounded_and_closed(self):
+        class FakeResponse:
+            status = 200
+            headers = {}
+
+            def __init__(self, payload):
+                self.payload = payload
+                self.closed = False
+
+            def read(self, size):
+                return self.payload[:size]
+
+            def close(self):
+                self.closed = True
+
+        for payload, accessor in (
+            (b"x" * (64 * 1024 + 1), "text"),
+            (b" " * (2 * 1024 * 1024 + 1), "json"),
+        ):
+            with self.subTest(accessor=accessor):
+                upstream = FakeResponse(payload)
+                connection = Mock()
+                response = ProviderResponse(connection, upstream)
+                with self.assertRaisesRegex(ValueError, "超过大小限制"):
+                    getattr(response, accessor)
+                self.assertTrue(upstream.closed)
+                connection.close.assert_called_once()
 
 
 if __name__ == "__main__":
