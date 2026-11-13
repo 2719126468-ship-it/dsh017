@@ -702,7 +702,7 @@ function render(items, append, instant){
     if(pic.indexOf("//") === 0) pic = "https:" + pic;
     a.innerHTML =
       '<div class="thumb">' +
-        (pic ? '<img src="/api/img?u=' + encodeURIComponent(pic) + '" loading="lazy" onerror="this.style.display=\\'none\\'">' : "") +
+        (pic ? '<img src="/api/img?u=' + encodeURIComponent(pic) + '" loading="lazy" onerror="this.style.display=\'none\'">' : "") +
         '<span class="dur">' + esc(v.duration || "") + '</span>' +
       '</div>' +
       '<div class="meta"><div class="title">' + esc(stripEm(v.title)) + '</div>' +
