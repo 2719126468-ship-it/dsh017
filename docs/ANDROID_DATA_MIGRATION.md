@@ -6,7 +6,7 @@ The Android Debug variant exposes **Export migration package** after its local s
 
 The Release variant checks for a fresh, empty app-private data directory before starting Python services. On first launch it offers **Import backup** or **Start fresh**. Import copies the selected document to private cache, validates the archive and SQLite database, then restores into the app-private `files/dsh017` and `files/dsh017/presets` layout before calling `start_services`. A failed or cancelled import does not start services or overwrite a non-empty destination.
 
-The shared archive validator checks the versioned manifest, exact archive member set, safe paths, duplicate names, member and total size bounds, SHA-256 hashes, SQLite integrity, provider metadata JSON and UTF-8 preset files. The restore helper permits the one Android-specific nested layout (`data/presets`) only when the data directory is otherwise empty and the preset directory is empty. Partial file writes are removed on failure.
+The shared archive validator checks the versioned manifest, exact archive member set, safe paths, duplicate names, member and total size bounds, SHA-256 hashes, SQLite integrity, provider metadata JSON and UTF-8 preset files. Android also caps the compressed SAF import at 520 MiB before writing it into private cache, matching the 512 MiB uncompressed payload ceiling with room for archive headers. The restore helper permits the one Android-specific nested layout (`data/presets`) only when the data directory is otherwise empty and the preset directory is empty. Partial file writes are removed on failure.
 
 ## User steps
 
