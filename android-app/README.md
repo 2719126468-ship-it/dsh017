@@ -36,7 +36,7 @@ The ARMv7 build uses the project's `requests` fallback because there is no compa
 
 Pull requests, branch pushes and manual CI runs build **debug** APKs for ARMv7 and ARM64. Those are test artifacts retained by GitHub Actions for 30 days. They use the Android debug signing identity and the debug application ID suffix; do not treat them as upgrade-compatible release APKs.
 
-A push of a `v*` tag runs the separate **Release** build for both ABIs. Release APKs are signed with one persistent keystore, and the publish job verifies that both APKs have the same signer certificate SHA-256 fingerprint before creating the GitHub Release. The release includes both APKs, `SHA256SUMS.txt`, and `SIGNING_CERT_SHA256.txt`. If signing secrets are missing or invalid, the Release build fails closed and does not fall back to a temporary debug key.
+A push to a `release/*` candidate branch runs the separate **Release** build for both ABIs and uploads signed APKs, signer fingerprints and per-APK SHA-256 files as GitHub Actions artifacts. This candidate path does **not** create a tag or publish a GitHub Release. A push of a `v*` tag runs the same persistent-signing build and, after the ABI signatures are verified to match, creates the versioned GitHub Release with both APKs, `SHA256SUMS.txt`, and `SIGNING_CERT_SHA256.txt`. If signing secrets are missing or invalid, the Release build fails closed and does not fall back to a temporary debug key.
 
 ### Configure the persistent release signing key
 

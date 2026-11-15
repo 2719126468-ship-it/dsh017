@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, "feature/**", "fix/**"]
+    branches: [main, "feature/**", "fix/**", "release/**"]
     tags: ["v*"]
   pull_request:
     branches: [main]
@@ -73,6 +73,7 @@ jobs:
           sha256sum dist/*.apk
 
       - name: Upload CI APK
+        if: ${{ !startsWith(github.ref, 'refs/heads/release/') }}
         uses: actions/upload-artifact@v4
         with:
           name: DSH017-CI-${{ matrix.artifact }}
@@ -82,7 +83,7 @@ jobs:
 
   build-release:
     name: Sign Release ${{ matrix.artifact }}
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/'))
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -170,7 +171,8 @@ jobs:
           CERT_SHA256="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$OUTPUT" | awk -F ': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}')"
           test -n "$CERT_SHA256"
           printf '%s\n' "$CERT_SHA256" > "dist/DSH017-${{ matrix.artifact }}.cert-sha256"
-          sha256sum "$OUTPUT"
+          sha256sum "$OUTPUT" > "${OUTPUT}.sha256"
+          cat "${OUTPUT}.sha256"
 
       - name: Upload signed Release APK
         uses: actions/upload-artifact@v4

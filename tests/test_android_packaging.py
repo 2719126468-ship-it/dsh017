@@ -67,6 +67,18 @@ class AndroidPackagingContractTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v4", workflow)
 
 
+    def test_release_candidate_branch_builds_signed_apks_without_publishing_release(self):
+        workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
+        gradle = self.read("app/build.gradle")
+        self.assertIn('branches: [main, "feature/**", "fix/**", "release/**"]', workflow)
+        self.assertIn("startsWith(github.ref, 'refs/heads/release/')", workflow)
+        self.assertIn("startsWith(github.ref, 'refs/tags/v')", workflow)
+        self.assertIn('sha256sum "$OUTPUT" > "${OUTPUT}.sha256"', workflow)
+        self.assertIn("versionCode 4", gradle)
+        self.assertIn('versionName "0.1.3"', gradle)
+        publish_gate = "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"
+        self.assertIn(publish_gate, workflow)
+
     def test_release_build_requires_persistent_signing_and_checks_both_abis(self):
         gradle = self.read("app/build.gradle")
         workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
