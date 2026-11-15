@@ -17,7 +17,7 @@
 
 ## Android 独立 APK
 
-`android-app/` 提供内置 WebView + 嵌入式 Python/Flask 后端的 APK 构建。支持 Android 8.1（API 27）及以上，分别产出 ARMv7 32 位和 ARM64 64 位安装包；不需要 Termux/proot。首次启动会在应用私有目录初始化 SQLite 和服务，AI 功能需在应用右上角配置自己的智谱 API Key。细节、网络兼容差异与构建步骤见 [`android-app/README.md`](android-app/README.md)。GitHub Actions 会分别构建两个架构的 APK；仅推送 `v*` 版本标签时才会创建对应 GitHub Release，普通主分支提交不会覆盖现有版本。
+`android-app/` 提供内置 WebView + 嵌入式 Python/Flask 后端的 APK 构建。支持 Android 8.1（API 27）及以上，分别产出 ARMv7 32 位和 ARM64 64 位安装包；不需要 Termux/proot。首次启动会在应用私有目录初始化 SQLite 和服务，AI 功能需在应用右上角配置自己的智谱 API Key。细节、网络兼容差异与构建步骤见 [`android-app/README.md`](android-app/README.md)。GitHub Actions 会分别构建两个架构的 APK；推送 `release/*` 分支会生成持久签名的 Release 候选 APK（仅 Actions 产物，不发布公开版本），只有推送 `v*` 版本标签时才会创建 GitHub Release。
 
 ## 环境
 
