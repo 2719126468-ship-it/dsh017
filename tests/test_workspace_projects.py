@@ -400,5 +400,102 @@ class WorkspaceProjectApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+    def test_deleting_directory_hides_nested_descendants_but_preserves_siblings(self):
+        project = self.client.post("/api/workspace/projects", json={
+            "name": "Delete tree " + uuid.uuid4().hex[:8],
+        }).get_json()["item"]
+        self.project_id = project["id"]
+
+        folder = self.client.post("/api/workspace/files", json={
+            "name": "src", "project_id": self.project_id, "kind": "directory",
+        })
+        self.assertEqual(folder.status_code, 201)
+        folder_id = folder.get_json()["id"]
+
+        nested = self.client.post("/api/workspace/files", json={
+            "name": "nested", "project_id": self.project_id,
+            "parent_id": folder_id, "kind": "directory",
+        })
+        self.assertEqual(nested.status_code, 201)
+        nested_id = nested.get_json()["id"]
+
+        child = self.client.post("/api/workspace/files", json={
+            "name": "module.py", "project_id": self.project_id,
+            "parent_id": nested_id,
+        })
+        self.assertEqual(child.status_code, 201)
+        child_id = child.get_json()["id"]
+
+        sibling = self.client.post("/api/workspace/files", json={
+            "name": "README.md", "project_id": self.project_id,
+        })
+        self.assertEqual(sibling.status_code, 201)
+        sibling_id = sibling.get_json()["id"]
+        self.file_ids.extend([folder_id, nested_id, child_id, sibling_id])
+
+        deleted = self.client.delete("/api/workspace/files/%d" % folder_id)
+        self.assertEqual(deleted.status_code, 200)
+
+        listing = self.client.get(
+            "/api/workspace/files?project_id=" + self.project_id
+        )
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(
+            {item["id"] for item in listing.get_json()["items"]},
+            {sibling_id},
+        )
+        for deleted_id in (folder_id, nested_id, child_id):
+            with self.subTest(deleted_file_id=deleted_id):
+                self.assertEqual(
+                    self.client.get(
+                        "/api/workspace/files/%d" % deleted_id
+                    ).status_code,
+                    404,
+                )
+        sibling_read = self.client.get("/api/workspace/files/%d" % sibling_id)
+        self.assertEqual(sibling_read.status_code, 200)
+        self.assertEqual(sibling_read.get_json()["name"], "README.md")
+
+    def test_deleting_project_hides_project_and_its_files(self):
+        project = self.client.post("/api/workspace/projects", json={
+            "name": "Delete project " + uuid.uuid4().hex[:8],
+            "description": "project delete regression",
+        }).get_json()["item"]
+        self.project_id = project["id"]
+        file_response = self.client.post("/api/workspace/files", json={
+            "name": "private.txt", "project_id": self.project_id,
+        })
+        self.assertEqual(file_response.status_code, 201)
+        file_id = file_response.get_json()["id"]
+        self.file_ids.append(file_id)
+
+        deleted = self.client.delete(
+            "/api/workspace/projects/" + self.project_id
+        )
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(
+            self.client.get(
+                "/api/workspace/projects/" + self.project_id
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/workspace/files?project_id=" + self.project_id
+            ).get_json()["items"],
+            [],
+        )
+        self.assertEqual(
+            self.client.get("/api/workspace/files/%d" % file_id).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.delete(
+                "/api/workspace/projects/" + self.project_id
+            ).status_code,
+            404,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
