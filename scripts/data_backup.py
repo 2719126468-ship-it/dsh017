@@ -268,15 +268,19 @@ def _restore(args) -> tuple[Path, Path]:
                     target_name = db_name if item.name == "database.sqlite3" else item.name
                     target = data_dir / target_name
                     with item.open("rb") as source, target.open("xb") as output:
+                        # Register the new path before copying: a failed or partial
+                        # write must also be removed by the rollback below.
+                        copied.append(target)
                         shutil.copyfileobj(source, output)
                     os.chmod(target, 0o600)
-                    copied.append(target)
                 for item in staged_presets.iterdir():
                     target = preset_dir / item.name
                     with item.open("rb") as source, target.open("xb") as output:
+                        # Register the new path before copying: a failed or partial
+                        # write must also be removed by the rollback below.
+                        copied.append(target)
                         shutil.copyfileobj(source, output)
                     os.chmod(target, 0o600)
-                    copied.append(target)
             except Exception:
                 for target in reversed(copied):
                     try:
