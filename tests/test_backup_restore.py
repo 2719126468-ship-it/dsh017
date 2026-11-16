@@ -7,6 +7,9 @@ import tarfile
 import tempfile
 import unittest
 import io
+import runpy
+import types
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -199,6 +202,44 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
         )
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "existing user data")
         self.assertFalse(target_presets.exists())
+
+
+    def test_restore_rolls_back_partially_written_files_after_io_failure(self):
+        # Keep only the database in data/ so the second copy is the first preset.
+        # The injected error writes a few bytes before failing, reproducing a
+        # disk-full / interrupted-write condition after a destination is created.
+        (self.source_data / "providers.json").unlink()
+        archive_path = self.create_backup()
+        restored_data = self.root / "partial-failure-data"
+        restored_presets = self.root / "partial-failure-presets"
+
+        module = runpy.run_path(str(TOOL))
+        original_copyfileobj = module["shutil"].copyfileobj
+        copy_count = 0
+
+        def fail_during_first_preset_copy(source, destination, length=16 * 1024):
+            nonlocal copy_count
+            copy_count += 1
+            if copy_count == 2:
+                destination.write(source.read(4))
+                raise OSError("simulated storage failure")
+            return original_copyfileobj(source, destination, length)
+
+        args = types.SimpleNamespace(
+            archive=str(archive_path),
+            data_dir=str(restored_data),
+            preset_dir=str(restored_presets),
+            db_name="bili_data.db",
+        )
+        with patch.object(
+            module["shutil"], "copyfileobj", side_effect=fail_during_first_preset_copy
+        ):
+            with self.assertRaises(module["BackupError"]):
+                module["_restore"](args)
+
+        self.assertEqual(copy_count, 2)
+        self.assertEqual(list(restored_data.iterdir()), [])
+        self.assertEqual(list(restored_presets.iterdir()), [])
 
 
 if __name__ == "__main__":
