@@ -196,6 +196,56 @@ class RemoteAuthTests(unittest.TestCase):
             self.assertEqual(paths[1].stat().st_mode & 0o777, 0o600)
 
 
+    def test_existing_token_files_are_hardened_before_reading(self):
+        with tempfile.TemporaryDirectory(prefix="dsh017-auth-existing-") as directory:
+            auth_path = Path(directory) / "auth_token"
+            admin_path = Path(directory) / "admin_token"
+            expected_auth = "normal-existing-" + "n" * 40
+            expected_admin = "admin-existing-" + "a" * 40
+            auth_path.write_text(expected_auth + "\n", encoding="utf-8")
+            admin_path.write_text(expected_admin + "\n", encoding="utf-8")
+            os.chmod(auth_path, 0o644)
+            os.chmod(admin_path, 0o644)
+
+            app = Flask("existing-auth")
+            app.add_url_rule("/", "home", lambda: jsonify(ok=True))
+            with patch.dict(os.environ, {
+                "DSH017_AUTH_TOKEN": "", "DSH017_ADMIN_TOKEN": ""
+            }, clear=False):
+                install_auth(app, data_dir=directory, local_ips={"192.0.2.1"})
+
+            self.assertEqual(auth_path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(admin_path.stat().st_mode & 0o777, 0o600)
+            response = app.test_client().get(
+                "/",
+                headers={"Authorization": "Bearer " + expected_auth},
+                environ_overrides={"REMOTE_ADDR": "192.0.2.44"},
+            )
+            self.assertEqual(response.status_code, 200)
+
+    def test_existing_token_file_permission_failure_aborts_startup(self):
+        with tempfile.TemporaryDirectory(prefix="dsh017-auth-insecure-") as directory:
+            auth_path = Path(directory) / "auth_token"
+            auth_path.write_text("normal-existing-" + "n" * 40 + "\n", encoding="utf-8")
+            os.chmod(auth_path, 0o644)
+            token_inode = auth_path.stat().st_ino
+            original_fchmod = os.fchmod
+
+            def fail_for_token_file(fd, mode):
+                if os.fstat(fd).st_ino == token_inode:
+                    raise PermissionError("simulated chmod failure")
+                return original_fchmod(fd, mode)
+
+            app = Flask("insecure-existing-auth")
+            with patch.dict(os.environ, {
+                "DSH017_AUTH_TOKEN": "", "DSH017_ADMIN_TOKEN": ""
+            }, clear=False):
+                with patch("app.auth.os.fchmod", side_effect=fail_for_token_file):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "Cannot secure token file permissions"
+                    ):
+                        install_auth(app, data_dir=directory, local_ips={"192.0.2.1"})
+
     def test_parallel_service_startup_uses_one_complete_token_pair(self):
         with tempfile.TemporaryDirectory(prefix="dsh017-auth-parallel-") as directory:
             def initialize(_):
