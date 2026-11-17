@@ -17,6 +17,7 @@ import ipaddress
 import os
 import secrets
 import socket
+import stat
 from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlsplit
@@ -62,13 +63,40 @@ def _token_file(path: Path) -> str:
                 create_flags |= os.O_NOFOLLOW
             fd = os.open(str(path), create_flags, 0o600)
         except FileExistsError:
-            if path.is_symlink() or not path.is_file():
-                raise RuntimeError(f"Token path is not a regular file: {path}")
+            # Open the existing file without following symlinks, then inspect and
+            # harden the opened inode before reading any credential bytes.
+            read_flags = os.O_RDONLY
+            read_flags |= getattr(os, "O_NOFOLLOW", 0)
+            read_flags |= getattr(os, "O_NONBLOCK", 0)
             try:
-                os.chmod(path, 0o600)
-            except OSError:
-                pass
-            value = path.read_text(encoding="utf-8").strip()
+                existing_fd = os.open(str(path), read_flags)
+            except OSError as exc:
+                raise RuntimeError(
+                    f"Refusing to read token file safely: {path}"
+                ) from exc
+            try:
+                info = os.fstat(existing_fd)
+                if not stat.S_ISREG(info.st_mode):
+                    raise RuntimeError(f"Token path is not a regular file: {path}")
+                if stat.S_IMODE(info.st_mode) != 0o600:
+                    try:
+                        os.fchmod(existing_fd, 0o600)
+                    except OSError as exc:
+                        raise RuntimeError(
+                            f"Cannot secure token file permissions: {path}"
+                        ) from exc
+                    info = os.fstat(existing_fd)
+                if stat.S_IMODE(info.st_mode) != 0o600:
+                    raise RuntimeError(
+                        f"Token file permissions are not private: {path}"
+                    )
+                token_file = os.fdopen(existing_fd, "r", encoding="utf-8")
+                existing_fd = None
+                with token_file:
+                    value = token_file.read().strip()
+            finally:
+                if existing_fd is not None:
+                    os.close(existing_fd)
         else:
             value = secrets.token_urlsafe(32)
             with os.fdopen(fd, "w", encoding="utf-8") as token_file:
