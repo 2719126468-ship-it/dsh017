@@ -7,26 +7,28 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-class SidecarAuthenticationTests(unittest.TestCase):
+class ServiceAuthenticationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory(prefix="dsh017-sidecar-auth-")
+        cls.tmp = tempfile.TemporaryDirectory(prefix="dsh017-service-auth-")
         with patch.dict(os.environ, {"DSH017_DATA_DIR": cls.tmp.name}, clear=False):
             cls.tarot = importlib.reload(importlib.import_module("tarot_server"))
             cls.novel = importlib.reload(importlib.import_module("novel_server"))
             cls.hub = importlib.reload(importlib.import_module("hub_server"))
+            cls.bili = importlib.reload(importlib.import_module("bili_console"))
 
         cls.apps = {
-            "tarot": cls.tarot.app,
-            "novel": cls.novel.app,
+            "bili": cls.bili.app,
             "hub": cls.hub.app,
+            "novel": cls.novel.app,
+            "tarot": cls.tarot.app,
         }
         cls.token_files = {
             tuple(app.extensions["dsh017_auth"]["token_files"])
             for app in cls.apps.values()
         }
         if len(cls.token_files) != 1:
-            raise AssertionError("Sidecar services must use the same token files")
+            raise AssertionError("All four services must use the same token files")
         normal_path, admin_path = next(iter(cls.token_files))
         cls.normal_token = Path(normal_path).read_text(encoding="utf-8").strip()
         cls.admin_token = Path(admin_path).read_text(encoding="utf-8").strip()
@@ -35,17 +37,19 @@ class SidecarAuthenticationTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def remote(self, client, path, token=None):
-        headers = {}
+    def remote(self, client, path, token=None, method="GET", **kwargs):
+        headers = dict(kwargs.pop("headers", {}) or {})
         if token:
             headers["Authorization"] = "Bearer " + token
-        return client.get(
+        return client.open(
             path,
+            method=method,
             headers=headers,
             environ_overrides={"REMOTE_ADDR": "198.51.100.23"},
+            **kwargs,
         )
 
-    def test_every_sidecar_uses_one_auth_hook_and_request_body_limit(self):
+    def test_every_service_uses_one_auth_hook_and_request_body_limit(self):
         for name, app in self.apps.items():
             with self.subTest(service=name):
                 hooks = [
@@ -55,18 +59,58 @@ class SidecarAuthenticationTests(unittest.TestCase):
                 self.assertEqual(len(hooks), 1)
                 self.assertEqual(app.config["MAX_CONTENT_LENGTH"], 8 * 1024 * 1024)
 
-    def test_every_sidecar_rejects_remote_requests_without_token(self):
+    def test_every_service_rejects_remote_page_and_health_without_token(self):
         for name, app in self.apps.items():
-            with self.subTest(service=name):
-                response = self.remote(app.test_client(), "/health")
+            client = app.test_client()
+            for path in ("/", "/health"):
+                with self.subTest(service=name, path=path):
+                    response = self.remote(client, path)
+                    self.assertEqual(response.status_code, 401)
+
+    def test_shared_normal_token_opens_every_service_page_and_health(self):
+        for name, app in self.apps.items():
+            client = app.test_client()
+            for path in ("/", "/health"):
+                with self.subTest(service=name, path=path):
+                    response = self.remote(client, path, self.normal_token)
+                    self.assertEqual(response.status_code, 200)
+                    if path == "/health":
+                        self.assertEqual(response.get_json()["status"], "ok")
+
+    def test_api_routes_on_all_four_services_require_remote_token(self):
+        api_paths = {
+            "bili": "/api/providers",
+            "hub": "/api/status",
+            "novel": "/api/search?q=auth-boundary-test",
+            "tarot": "/api/draw?n=1",
+        }
+        for name, path in api_paths.items():
+            with self.subTest(service=name, path=path):
+                response = self.remote(self.apps[name].test_client(), path)
                 self.assertEqual(response.status_code, 401)
 
-    def test_shared_normal_token_works_on_every_sidecar(self):
-        for name, app in self.apps.items():
-            with self.subTest(service=name):
-                response = self.remote(app.test_client(), "/health", self.normal_token)
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.get_json()["status"], "ok")
+    def test_bili_provider_api_keeps_secrets_out_of_remote_read_response(self):
+        client = self.bili.app.test_client()
+        response = self.remote(client, "/api/providers", self.normal_token)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["code"], 0)
+        for provider in payload["items"]:
+            self.assertNotIn("api_key", provider)
+
+    def test_bili_provider_write_requires_admin_token_on_real_service_app(self):
+        client = self.bili.app.test_client()
+        normal = self.remote(
+            client, "/api/providers", self.normal_token, method="POST", json={}
+        )
+        self.assertEqual(normal.status_code, 403)
+
+        # An invalid body is rejected by the route after the admin auth gate;
+        # this proves the admin token reaches the handler without writing data.
+        admin = self.remote(
+            client, "/api/providers", self.admin_token, method="POST", json={}
+        )
+        self.assertEqual(admin.status_code, 400)
 
     def test_host_local_access_remains_exempt(self):
         for name, app in self.apps.items():
@@ -76,10 +120,6 @@ class SidecarAuthenticationTests(unittest.TestCase):
                     environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
                 )
                 self.assertEqual(response.status_code, 200)
-
-    def test_hub_status_api_requires_remote_token(self):
-        response = self.remote(self.hub.app.test_client(), "/api/status")
-        self.assertEqual(response.status_code, 401)
 
     def test_hub_checks_services_server_side(self):
         class FakeResponse:
@@ -111,7 +151,6 @@ class SidecarAuthenticationTests(unittest.TestCase):
         for port in ("8080", "8084", "8091", "8092"):
             self.assertTrue(statuses[port]["online"], port)
         self.assertIn("metrics", statuses["8092"])
-
 
     def test_novel_image_proxy_rejects_untrusted_urls_before_network(self):
         with patch("novel_server.validate_remote_url", return_value=False) as validate, \
