@@ -56,10 +56,10 @@ def create_source_database(path):
             INSERT INTO favorites VALUES('BVrestore001', 'restored favorite', '', 'test', 100);
             INSERT INTO watch_progress VALUES('BVrestore001', 11, 42.5, 120, 100);
             INSERT INTO workspace_projects VALUES(
-                'project-restore', 'Restored project', '', 100, 100
+                'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Restored project', '', 100, 100
             );
             INSERT INTO workspace_files VALUES(
-                7, 'plan.md', NULL, 'project-restore', 'restored workspace content',
+                7, 'plan.md', NULL, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'restored workspace content',
                 3, NULL, 100, 'file'
             );
             INSERT INTO workspace_file_versions VALUES(
@@ -174,7 +174,7 @@ history_response = client.get("/api/history")
 favorites_response = client.get("/api/fav")
 progress_response = client.get("/api/progress?bvid=BVrestore001&cid=11")
 projects_response = client.get("/api/workspace/projects")
-files_response = client.get("/api/workspace/files?project_id=project-restore")
+files_response = client.get("/api/workspace/files?project_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 versions_response = client.get("/api/workspace/files/7/versions")
 
 print(json.dumps({
@@ -238,7 +238,7 @@ print(json.dumps({
         self.assertEqual(routes["progress"]["position"], 42.5)
         self.assertEqual(routes["projects_status"], 200)
         self.assertIn(
-            "project-restore",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             [item["id"] for item in routes["projects"]["items"]],
         )
         self.assertEqual(routes["files_status"], 200)
