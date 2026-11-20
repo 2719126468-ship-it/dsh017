@@ -154,6 +154,7 @@ class BackupRestoreApplicationStartupTests(unittest.TestCase):
         probe = """
 import json
 import app.db as db
+from bili_console import app as service_app
 
 connection = db._db_conn()
 try:
@@ -166,6 +167,16 @@ try:
 finally:
     connection.close()
 
+# Importing the production Flask entrypoint models a fresh service start,
+# rather than only proving that the database helper can open the restored file.
+client = service_app.test_client()
+history_response = client.get("/api/history")
+favorites_response = client.get("/api/fav")
+progress_response = client.get("/api/progress?bvid=BVrestore001&cid=11")
+projects_response = client.get("/api/workspace/projects")
+files_response = client.get("/api/workspace/files?project_id=project-restore")
+versions_response = client.get("/api/workspace/files/7/versions")
+
 print(json.dumps({
     "data_dir": db._DATA_DIR,
     "db_path": db._DB_PATH,
@@ -175,6 +186,20 @@ print(json.dumps({
     "conversation": db.db_chat_conversation_get("chat-restore"),
     "workspace_file": workspace_file["content"] if workspace_file else None,
     "workspace_version": workspace_version["content"] if workspace_version else None,
+    "service_routes": {
+        "history_status": history_response.status_code,
+        "history": history_response.get_json(),
+        "favorites_status": favorites_response.status_code,
+        "favorites": favorites_response.get_json(),
+        "progress_status": progress_response.status_code,
+        "progress": progress_response.get_json(),
+        "projects_status": projects_response.status_code,
+        "projects": projects_response.get_json(),
+        "files_status": files_response.status_code,
+        "files": files_response.get_json(),
+        "versions_status": versions_response.status_code,
+        "versions": versions_response.get_json(),
+    },
 }))
 """
         started = subprocess.run(
@@ -200,6 +225,29 @@ print(json.dumps({
         )
         self.assertEqual(state["workspace_file"], "restored workspace content")
         self.assertEqual(state["workspace_version"], "restored previous revision")
+
+        # Exercise the production Flask entrypoint after the restored paths
+        # have been selected, including the user-facing history and Workspace
+        # APIs that a restarted service exposes.
+        routes = state["service_routes"]
+        self.assertEqual(routes["history_status"], 200)
+        self.assertEqual(routes["history"]["items"][0]["q"], "restore startup query")
+        self.assertEqual(routes["favorites_status"], 200)
+        self.assertEqual(routes["favorites"]["items"][0]["title"], "restored favorite")
+        self.assertEqual(routes["progress_status"], 200)
+        self.assertEqual(routes["progress"]["position"], 42.5)
+        self.assertEqual(routes["projects_status"], 200)
+        self.assertIn(
+            "project-restore",
+            [item["id"] for item in routes["projects"]["items"]],
+        )
+        self.assertEqual(routes["files_status"], 200)
+        self.assertIn(7, [item["id"] for item in routes["files"]["items"]])
+        self.assertEqual(routes["versions_status"], 200)
+        self.assertEqual(
+            routes["versions"]["items"][0]["source"],
+            "manual",
+        )
 
 
 if __name__ == "__main__":
