@@ -186,6 +186,14 @@ class BackupRestoreApplicationStartupTests(unittest.TestCase):
             "DSH017_BACKUP_DIR": str(self.root / "restored-backups"),
             "PYTHONPATH": str(ROOT) + os.pathsep + env.get("PYTHONPATH", ""),
         })
+
+        # The production database initializer idempotently seeds the built-in
+        # "default" Workspace project on first service startup. Account for
+        # that expected application-owned row while still checking that all
+        # restored user records remain present and no extra rows appear on a
+        # subsequent restart.
+        expected_service_counts = dict(source_snapshot["row_counts"])
+        expected_service_counts["workspace_projects"] += 1
         probe = """
 import json
 import app.db as db
@@ -269,7 +277,7 @@ print(json.dumps({
         self.assertEqual(state["data_dir"], str(restored_data))
         self.assertEqual(state["db_path"], str(restored_db))
         self.assertEqual(state["integrity"], "ok")
-        self.assertEqual(state["row_counts"], source_snapshot["row_counts"])
+        self.assertEqual(state["row_counts"], expected_service_counts)
         self.assertEqual(state["history"], ["restore startup query"])
         self.assertEqual(state["favorites"][0]["title"], "restored favorite")
         self.assertEqual(state["progress"]["position"], 42.5)
@@ -316,7 +324,7 @@ print(json.dumps({
         self.assertEqual(restarted_state["integrity"], "ok")
         self.assertEqual(
             restarted_state["row_counts"],
-            source_snapshot["row_counts"],
+            expected_service_counts,
         )
         self.assertEqual(
             restarted_state["service_routes"]["history"]["items"][0]["q"],
