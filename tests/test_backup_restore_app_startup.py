@@ -73,6 +73,29 @@ def create_source_database(path):
         """)
 
 
+def database_snapshot(path):
+    """Return reproducible integrity and row-count evidence for key tables."""
+    tables = (
+        "chat_conversations",
+        "search_history",
+        "favorites",
+        "watch_progress",
+        "workspace_projects",
+        "workspace_files",
+        "workspace_file_versions",
+        "workspace_rules",
+    )
+    with sqlite3.connect(path) as connection:
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+        row_counts = {
+            table: connection.execute(
+                'SELECT COUNT(*) FROM "' + table + '"'
+            ).fetchone()[0]
+            for table in tables
+        }
+    return {"integrity": integrity, "row_counts": row_counts}
+
+
 class BackupRestoreApplicationStartupTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="dsh017-backup-app-start-")
@@ -132,6 +155,18 @@ class BackupRestoreApplicationStartupTests(unittest.TestCase):
 
         restored_db = restored_data / "bili_data.db"
         self.assertTrue(restored_db.is_file())
+
+        # Compare the source and recovered copies explicitly. The restore
+        # command also validates integrity internally; these assertions keep
+        # the before/after evidence visible in this end-to-end drill.
+        source_snapshot = database_snapshot(self.source_data / "bili_data.db")
+        restored_snapshot = database_snapshot(restored_db)
+        self.assertEqual(source_snapshot["integrity"], "ok")
+        self.assertEqual(restored_snapshot["integrity"], "ok")
+        self.assertEqual(
+            restored_snapshot["row_counts"],
+            source_snapshot["row_counts"],
+        )
         self.assertEqual(
             (restored_data / "providers.json").read_text(encoding="utf-8"),
             (self.source_data / "providers.json").read_text(encoding="utf-8"),
@@ -164,6 +199,18 @@ try:
     workspace_version = connection.execute(
         "SELECT content FROM workspace_file_versions WHERE id=9"
     ).fetchone()
+    integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+    tables = (
+        "chat_conversations", "search_history", "favorites", "watch_progress",
+        "workspace_projects", "workspace_files", "workspace_file_versions",
+        "workspace_rules",
+    )
+    row_counts = {
+        table: connection.execute(
+            'SELECT COUNT(*) FROM "' + table + '"'
+        ).fetchone()[0]
+        for table in tables
+    }
 finally:
     connection.close()
 
@@ -180,6 +227,8 @@ versions_response = client.get("/api/workspace/files/7/versions")
 print(json.dumps({
     "data_dir": db._DATA_DIR,
     "db_path": db._DB_PATH,
+    "integrity": integrity,
+    "row_counts": row_counts,
     "history": db.db_history_list(),
     "favorites": db.db_fav_list(),
     "progress": db.db_progress_get("BVrestore001", 11),
@@ -202,20 +251,25 @@ print(json.dumps({
     },
 }))
 """
-        started = subprocess.run(
-            [sys.executable, "-c", probe],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=30,
-        )
+        def start_service_process():
+            return subprocess.run(
+                [sys.executable, "-c", probe],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=30,
+            )
+
+        started = start_service_process()
         self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
         state = json.loads(started.stdout.strip())
 
         self.assertEqual(state["data_dir"], str(restored_data))
         self.assertEqual(state["db_path"], str(restored_db))
+        self.assertEqual(state["integrity"], "ok")
+        self.assertEqual(state["row_counts"], source_snapshot["row_counts"])
         self.assertEqual(state["history"], ["restore startup query"])
         self.assertEqual(state["favorites"][0]["title"], "restored favorite")
         self.assertEqual(state["progress"]["position"], 42.5)
@@ -247,6 +301,30 @@ print(json.dumps({
         self.assertEqual(
             routes["versions"]["items"][0]["source"],
             "manual",
+        )
+
+        # A second clean process with the exact same environment models the
+        # next supervisor-managed service start. It must reopen the same
+        # recovered database without losing or silently recreating records.
+        restarted = start_service_process()
+        self.assertEqual(
+            restarted.returncode, 0, restarted.stdout + restarted.stderr
+        )
+        restarted_state = json.loads(restarted.stdout.strip())
+        self.assertEqual(restarted_state["data_dir"], str(restored_data))
+        self.assertEqual(restarted_state["db_path"], str(restored_db))
+        self.assertEqual(restarted_state["integrity"], "ok")
+        self.assertEqual(
+            restarted_state["row_counts"],
+            source_snapshot["row_counts"],
+        )
+        self.assertEqual(
+            restarted_state["service_routes"]["history"]["items"][0]["q"],
+            "restore startup query",
+        )
+        self.assertEqual(
+            restarted_state["service_routes"]["files"]["items"][0]["id"],
+            7,
         )
 
 
