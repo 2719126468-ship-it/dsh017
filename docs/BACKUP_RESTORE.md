@@ -77,3 +77,14 @@ Use those exact values for startup and shutdown. Verify chats, Workspace project
     python3 -m unittest discover -s tests -p 'test_backup_restore.py' -v
 
 The tests create synthetic records in a temporary database, archive and restore them into fresh directories, check representative table data and SQLite integrity, confirm that API keys and auth tokens are excluded, corrupt an archive to prove rejection, and verify that a non-empty destination is never overwritten.
+
+
+## Supervisor stop/start regression drill
+
+Run the real-service recovery regression in an isolated test environment:
+
+    python3 -m unittest discover -s tests -p 'test_backup_restore_supervisor.py' -v
+
+The test creates synthetic SQLite records and a preset, uses the production backup utility to restore them into new temporary directories, then starts the actual Bilibili, Hub, Novel, and Tarot services through copies of the supervisor scripts under their deployed filenames. It checks all four /health endpoints and the Bilibili /metrics view of the restored database, stops the supervisors through stop_services.sh, and starts them again with the exact same DSH017_DATA_DIR, DSH017_DB_PATH, DSH017_PRESET_DIR, and DSH017_BACKUP_DIR values. SQLite integrity and the synthetic history, favorite, and watch-progress records are checked before and after the restart.
+
+The test skips rather than touching another process if any required service port (8080, 8084, 8091, or 8092) is already occupied. All generated data is confined to a temporary directory. This remains an automated Linux service-process test; it does not prove Android app-private storage recovery or a physical-device migration.
