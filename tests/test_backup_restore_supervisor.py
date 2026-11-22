@@ -300,6 +300,26 @@ class BackupRestoreSupervisorIntegrationTests(unittest.TestCase):
         self.supervisors = []
         self.log_handles = []
 
+    def _assert_services_stopped(self):
+        deadline = time.monotonic() + 5
+        listening = []
+        while time.monotonic() < deadline:
+            listening = []
+            for port in SERVICE_PORTS.values():
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    sock.settimeout(0.2)
+                    if sock.connect_ex(("127.0.0.1", port)) == 0:
+                        listening.append(port)
+            if not listening:
+                return
+            time.sleep(0.1)
+        self.fail(
+            "service ports remained open after supervisor stop: "
+            + ", ".join(map(str, listening))
+            + "\n"
+            + self._supervisor_logs()
+        )
+
     def _cleanup_supervisors(self):
         if any(process.poll() is None for process in self.supervisors):
             try:
@@ -344,6 +364,7 @@ class BackupRestoreSupervisorIntegrationTests(unittest.TestCase):
         # Stop only the supervisors recorded under this isolated restored data
         # directory, then verify the database remains intact before restart.
         self._stop_supervisors()
+        self._assert_services_stopped()
         self._assert_restored_database()
 
         # Reuse the exact same data, DB, preset, and backup paths.
@@ -352,6 +373,7 @@ class BackupRestoreSupervisorIntegrationTests(unittest.TestCase):
         self._assert_bili_service_reads_restored_database()
         self._assert_restored_database()
         self._stop_supervisors()
+        self._assert_services_stopped()
 
 
 if __name__ == "__main__":
