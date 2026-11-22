@@ -376,5 +376,34 @@ class BackupRestoreSupervisorIntegrationTests(unittest.TestCase):
         self._assert_services_stopped()
 
 
+    def test_stop_services_removes_stale_pid_files_without_signalling_unrelated_processes(self):
+        # A PID file without its supervisor lock is stale. Use this test
+        # process's PID as a canary: stop_services.sh must not signal it.
+        run_dir = self.restored_data / "run"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        pid_files = (
+            run_dir / "bili-supervisor.pid",
+            run_dir / "sidecars-supervisor.pid",
+        )
+        for pid_file in pid_files:
+            pid_file.write_text(str(os.getpid()) + "\\n", encoding="utf-8")
+
+        for _ in range(2):
+            result = self._run(
+                ["bash", str(self.sandbox / "stop_services.sh")],
+                cwd=self.sandbox,
+                env=self.service_env,
+                timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(
+                all(not pid_file.exists() for pid_file in pid_files),
+                result.stdout + result.stderr,
+            )
+            # Prove that a stale PID cannot make the stop script kill an
+            # unrelated process when its supervisor lock is absent.
+            os.kill(os.getpid(), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
