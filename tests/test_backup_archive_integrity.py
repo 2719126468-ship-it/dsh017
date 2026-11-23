@@ -1,5 +1,6 @@
 import io
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -25,7 +26,10 @@ class BackupArchiveIntegrityTests(unittest.TestCase):
 
         with sqlite3.connect(self.data_dir / "bili_data.db") as connection:
             connection.execute("CREATE TABLE archive_probe (value TEXT NOT NULL)")
-            connection.execute("INSERT INTO archive_probe VALUES ('preserve-me')")
+            connection.execute(
+                "INSERT INTO archive_probe VALUES (?)",
+                (os.urandom(64 * 1024).hex(),),
+            )
 
     def tearDown(self):
         self.temp.cleanup()
@@ -116,10 +120,10 @@ class BackupArchiveIntegrityTests(unittest.TestCase):
         archive = self.create_archive()
         truncated = self.root / "truncated.tar.gz"
         archive_bytes = archive.read_bytes()
-        self.assertGreater(len(archive_bytes), 20)
-        # Remove part of the gzip trailer and compressed stream so reading a
-        # member raises EOFError instead of yielding a complete archive.
-        truncated.write_bytes(archive_bytes[:-20])
+        self.assertGreater(len(archive_bytes), 100)
+        # The database contains incompressible synthetic data, so removing
+        # bytes from the gzip stream forces EOFError while reading its member.
+        truncated.write_bytes(archive_bytes[:-100])
 
         result = self.run_restore(truncated, "rejected-truncated")
         self.assertIn("backup archive is corrupt or unreadable", result.stderr)
