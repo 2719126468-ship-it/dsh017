@@ -284,7 +284,7 @@ def _restore(args) -> tuple[Path, Path]:
                     except OSError:
                         pass
                 raise
-        except (tarfile.TarError, OSError, UnicodeError, ValueError, KeyError, TypeError) as exc:
+        except (tarfile.TarError, OSError, UnicodeError, ValueError, KeyError, TypeError, EOFError) as exc:
             if isinstance(exc, BackupError):
                 raise
             raise BackupError("backup archive is corrupt or unreadable") from exc
@@ -315,7 +315,7 @@ def main() -> int:
             print("Restored presets to: " + str(preset_dir))
             print("Provider API keys and auth tokens were intentionally not restored.")
         return 0
-    except (BackupError, OSError, tarfile.TarError) as exc:
+    except (BackupError, OSError, tarfile.TarError, EOFError) as exc:
         print("ERROR: " + str(exc), file=sys.stderr)
         return 2
 
