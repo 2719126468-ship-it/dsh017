@@ -64,3 +64,13 @@ The tagged Release workflow does not publish debug APKs. It requires all four se
 The published `v0.1.2` APK was produced from the Debug variant: the tagged source declares the package ID `com.dsh017.android` with the Debug suffix `.debug`, and the tag workflow packaged `assembleArm32Debug` / `assembleArm64Debug`. The first persistent Release build uses the normal Release package ID `com.dsh017.android`. Android therefore treats the legacy Debug package and the new Release package as separate apps. They can coexist, but their private SQLite files, Android Keystore entries, and WebView data are not automatically copied.
 
 **Keep the legacy app installed. Do not uninstall it to install the new Release build until a verified export / restore migration has been completed.** The new persistent signing identity guarantees consistency for future Release-to-Release updates; it cannot recreate the private key used by a previous ephemeral GitHub-hosted debug runner. Backup / restore and migration must be validated before the legacy installation can safely be retired.
+
+
+### Export from an already-installed v0.1.2 Debug APK
+
+The published v0.1.2 app predates the in-app SAF export button, and a later
+Debug APK may not be installable over it because CI Debug signing is not
+persistent. If the old com.dsh017.android.debug app is already installed,
+use the host-side, read-only ADB fallback documented in
+[Legacy Android ADB export](../docs/LEGACY_ANDROID_ADB_EXPORT.md). Keep the old
+app installed until the new Release app has imported and verified the archive.
