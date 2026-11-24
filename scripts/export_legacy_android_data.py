@@ -122,6 +122,22 @@ def _verify_legacy_package(adb: str, serial: str, package: str) -> None:
             "不要卸载旧应用，也不要尝试读取其他应用的数据。"
         )
 
+    data_check = _run_capture(
+        adb,
+        serial,
+        "shell",
+        "run-as",
+        package,
+        "sh",
+        "-c",
+        "test -d files/dsh017 && test -f files/dsh017/bili_data.db",
+    )
+    if data_check.returncode != 0:
+        raise LegacyExportError(
+            "run-as 已授权，但未在应用私有目录中找到 files/dsh017/bili_data.db；"
+            "为避免导出错误数据，已中止。"
+        )
+
 
 def _assert_app_stopped(adb: str, serial: str, package: str) -> None:
     """Require the app process to be stopped so SQLite files cannot change mid-copy."""

@@ -60,6 +60,8 @@ class LegacyAndroidAdbExportTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 0, stdout=device_list, stderr="")
             if "shell pm path " in joined:
                 return subprocess.CompletedProcess(command, 0, stdout="package:/data/app/test/base.apk\n", stderr="")
+            if "shell run-as " in joined and "test -d files/dsh017" in joined:
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
             if "shell run-as " in joined and joined.endswith(" id"):
                 return subprocess.CompletedProcess(command, 0, stdout="uid=10123(u0_a123) gid=10123(u0_a123)\n", stderr="")
             if "shell pidof " in joined:
@@ -128,6 +130,8 @@ class LegacyAndroidAdbExportTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 0, stdout="List of devices attached\nserial-1 device\n", stderr="")
             if "shell pm path " in joined:
                 return subprocess.CompletedProcess(command, 0, stdout="package:/data/app/test/base.apk\n", stderr="")
+            if "shell run-as " in joined and "test -d files/dsh017" in joined:
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
             if "shell run-as " in joined and joined.endswith(" id"):
                 return subprocess.CompletedProcess(command, 0, stdout="uid=10123\n", stderr="")
             if "shell pidof " in joined:
