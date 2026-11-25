@@ -174,7 +174,7 @@ def _requires_admin(path: str, method: str, json_body: dict | None) -> bool:
 
 
 def _is_cross_site_write(request) -> bool:
-    """Reject browser write requests whose Fetch Metadata/Origin is cross-site."""
+    """Reject browser write requests that are not same-origin."""
     fetch_site = request.headers.get("Sec-Fetch-Site", "").strip().lower()
     if fetch_site in {"cross-site", "same-site"}:
         return True
@@ -253,6 +253,15 @@ def install_auth(
             response.headers["Cache-Control"] = "no-store"
             return response
 
+        # Loopback is not a browser trust boundary: a remote page can submit
+        # writes to localhost. Enforce Fetch Metadata / Origin before the local
+        # address exemption so local browser requests receive the same CSRF check.
+        if request.method in _WRITE_METHODS and _is_cross_site_write(request):
+            response = jsonify({"code": -403, "message": "拒绝跨站写入请求。"})
+            response.status_code = 403
+            response.headers["Cache-Control"] = "no-store"
+            return response
+
         if _client_ip_is_local(request.remote_addr, trusted):
             request.environ["dsh017.auth_level"] = "local"
             return None
@@ -277,12 +286,6 @@ def install_auth(
         body = request.get_json(silent=True) if request.is_json else None
         if _requires_admin(request.path, request.method, body) and level != "admin":
             response = jsonify({"code": -403, "message": "此操作需要管理员 Token。"})
-            response.status_code = 403
-            response.headers["Cache-Control"] = "no-store"
-            return response
-
-        if request.method in _WRITE_METHODS and _is_cross_site_write(request):
-            response = jsonify({"code": -403, "message": "拒绝跨站写入请求。"})
             response.status_code = 403
             response.headers["Cache-Control"] = "no-store"
             return response
