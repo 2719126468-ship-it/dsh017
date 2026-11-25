@@ -26,7 +26,7 @@ class LoopbackCsrfBoundaryTests(unittest.TestCase):
             auth_token="normal-loopback-test-" + "n" * 40,
             admin_token="admin-loopback-test-" + "a" * 40,
             data_dir=self.temp.name,
-            local_ips=[],
+            local_ips={"192.168.50.10"},
         )
         self.client = app.test_client()
 
@@ -49,6 +49,14 @@ class LoopbackCsrfBoundaryTests(unittest.TestCase):
                 )
                 self.assertEqual(response.status_code, 403)
                 self.assertEqual(response.get_json()["code"], -403)
+        self.assertEqual(self.write_calls, 0)
+
+    def test_trusted_host_interface_cross_origin_write_is_rejected(self):
+        response = self._local_post(
+            remote_addr="192.168.50.10",
+            headers={"Origin": "https://attacker.example"},
+        )
+        self.assertEqual(response.status_code, 403)
         self.assertEqual(self.write_calls, 0)
 
     def test_loopback_cross_site_fetch_metadata_is_rejected(self):
