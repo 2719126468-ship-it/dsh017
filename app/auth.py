@@ -209,7 +209,8 @@ def install_auth(
 
     Standard token permits normal remote read/write. Admin token permits all
     operations, including policy changes, backup creation and automatic editing.
-    Requests originating from this host are exempt.
+    Host-local requests are exempt from token authentication, but browser writes
+    must still pass the same-origin CSRF check.
     """
 
     # All services share one request-body ceiling to bound memory pressure.
