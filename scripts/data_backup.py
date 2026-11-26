@@ -137,20 +137,41 @@ def _backup(args) -> Path:
         manifest_bytes = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         archive_path = backup_dir / ("dsh017-backup-" + stamp + ".tar.gz")
-        temp_archive = backup_dir / (archive_path.name + ".tmp")
+        if os.path.lexists(archive_path):
+            raise BackupError("backup archive already exists; refusing to overwrite")
+
+        # Never reopen a predictable temporary pathname: a pre-created symlink
+        # in the backup directory could otherwise redirect tarfile's write.
+        # Keep the mkstemp descriptor open and pass it directly to tarfile.
+        fd, temp_name = tempfile.mkstemp(
+            prefix=".dsh017-backup-", suffix=".tmp", dir=str(backup_dir)
+        )
+        temp_archive = Path(temp_name)
         try:
-            with tarfile.open(temp_archive, "w:gz") as archive:
-                info = tarfile.TarInfo("manifest.json")
-                info.size = len(manifest_bytes)
-                info.mode = 0o600
-                archive.addfile(info, io.BytesIO(manifest_bytes))
-                for name, path in sorted(payloads.items()):
-                    archive.add(path, arcname=name, recursive=False)
-            os.chmod(temp_archive, 0o600)
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w+b") as raw_archive:
+                fd = -1
+                with tarfile.open(fileobj=raw_archive, mode="w:gz") as archive:
+                    info = tarfile.TarInfo("manifest.json")
+                    info.size = len(manifest_bytes)
+                    info.mode = 0o600
+                    archive.addfile(info, io.BytesIO(manifest_bytes))
+                    for name, path in sorted(payloads.items()):
+                        archive.add(path, arcname=name, recursive=False)
+                raw_archive.flush()
+                os.fsync(raw_archive.fileno())
+
+            # A unique timestamp collision must not replace an earlier backup.
+            if os.path.lexists(archive_path):
+                raise BackupError("backup archive already exists; refusing to overwrite")
             os.replace(temp_archive, archive_path)
         finally:
-            if temp_archive.exists():
+            if fd >= 0:
+                os.close(fd)
+            try:
                 temp_archive.unlink()
+            except FileNotFoundError:
+                pass
         return archive_path
 
 
