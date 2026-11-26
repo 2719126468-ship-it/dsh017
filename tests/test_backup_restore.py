@@ -1,4 +1,8 @@
+import argparse
+import importlib.util
 import json
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -11,6 +15,19 @@ import io
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = ROOT / "scripts" / "data_backup.py"
+
+
+def load_backup_module():
+    spec = importlib.util.spec_from_file_location("dsh017_data_backup_test", TOOL)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class FrozenDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 11, 26, 9, 8, 13, 123456, tzinfo=tz)
 
 
 def create_source_database(path):
@@ -115,6 +132,55 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
         self.assertFalse((restored_data / "auth_token").exists())
         self.assertFalse((restored_data / "admin_token").exists())
         self.assertFalse((restored_data / "database.sqlite3").exists())
+
+    def test_backup_does_not_follow_predictable_temporary_symlink(self):
+        self.backups.mkdir()
+        archive_name = "dsh017-backup-20261126T090813123456Z.tar.gz"
+        sentinel = self.root / "outside-sentinel.txt"
+        sentinel.write_text("preserve this unrelated file", encoding="utf-8")
+        predictable_temp = self.backups / (archive_name + ".tmp")
+        try:
+            os.symlink(sentinel, predictable_temp)
+        except (NotImplementedError, OSError) as error:
+            self.skipTest("symlinks are unavailable in this environment: " + str(error))
+
+        module = load_backup_module()
+        module.datetime = FrozenDateTime
+        args = argparse.Namespace(
+            data_dir=str(self.source_data),
+            db_path=str(self.source_data / "bili_data.db"),
+            preset_dir=str(self.source_presets),
+            backup_dir=str(self.backups),
+        )
+        archive_path = module._backup(args)
+
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve this unrelated file")
+        self.assertTrue(predictable_temp.is_symlink())
+        self.assertEqual(archive_path.name, archive_name)
+        self.assertTrue(archive_path.is_file())
+        self.assertFalse(archive_path.is_symlink())
+        self.assertEqual(archive_path.stat().st_mode & 0o777, 0o600)
+        with tarfile.open(archive_path, "r:gz") as archive:
+            self.assertIn("database.sqlite3", archive.getnames())
+
+    def test_backup_refuses_to_replace_existing_timestamped_archive(self):
+        self.backups.mkdir()
+        archive_path = self.backups / "dsh017-backup-20261126T090813123456Z.tar.gz"
+        archive_path.write_text("keep the earlier backup", encoding="utf-8")
+
+        module = load_backup_module()
+        module.datetime = FrozenDateTime
+        args = argparse.Namespace(
+            data_dir=str(self.source_data),
+            db_path=str(self.source_data / "bili_data.db"),
+            preset_dir=str(self.source_presets),
+            backup_dir=str(self.backups),
+        )
+        with self.assertRaisesRegex(module.BackupError, "refusing to overwrite"):
+            module._backup(args)
+
+        self.assertEqual(archive_path.read_text(encoding="utf-8"), "keep the earlier backup")
+        self.assertEqual(list(self.backups.glob(".dsh017-backup-*.tmp")), [])
 
     def test_backup_handles_database_paths_with_uri_reserved_characters(self):
         source = self.source_data / "database # ? data.sqlite3"
