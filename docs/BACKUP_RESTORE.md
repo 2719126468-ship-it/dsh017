@@ -31,7 +31,7 @@ Run from the repository root:
       --preset-dir "$DSH017_PRESET_DIR" \
       --backup-dir "$DSH017_BACKUP_DIR"
 
-Each archive is written with mode 0600. It contains a versioned manifest with file sizes and SHA-256 hashes. SQLite PRAGMA integrity_check must return ok before the archive is finalized. The script refuses symlinked databases, provider metadata, preset directories, or preset files, and rejects oversized inputs.
+Each archive is written with mode 0600. It contains a versioned manifest with file sizes and SHA-256 hashes. The archive is first written through an exclusively created private temporary file descriptor, synced, and then published; a pre-existing temporary symlink or timestamp-collision target is never opened or overwritten. SQLite PRAGMA integrity_check must return ok before the archive is finalized. The script refuses symlinked databases, provider metadata, preset directories, or preset files, and rejects oversized inputs.
 
 When optional variables are not set, export the same defaults used by the running service:
 
