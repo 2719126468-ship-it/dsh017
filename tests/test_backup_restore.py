@@ -200,6 +200,22 @@ class IsolatedBackupRestoreTests(unittest.TestCase):
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "existing user data")
         self.assertFalse(target_presets.exists())
 
+    def test_restore_rejects_oversized_archive_before_creating_destinations(self):
+        oversized = self.root / "oversized-backup.tar.gz"
+        with oversized.open("wb") as stream:
+            # Sparse file: exercise the size guard without allocating 520 MiB.
+            stream.truncate(520 * 1024 * 1024 + 1)
+
+        target_data = self.root / "oversized-restore-data"
+        target_presets = self.root / "oversized-restore-presets"
+        result = self.run_tool(
+            "restore", "--archive", oversized, "--data-dir",
+            target_data, "--preset-dir", target_presets, expected=2,
+        )
+        self.assertIn("backup archive exceeds compressed size limit", result.stderr)
+        self.assertFalse(target_data.exists())
+        self.assertFalse(target_presets.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

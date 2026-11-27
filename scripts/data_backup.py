@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MAX_FILES = 2048
 MAX_FILE_BYTES = 256 * 1024 * 1024
 MAX_TOTAL_BYTES = 512 * 1024 * 1024
+MAX_ARCHIVE_BYTES = 520 * 1024 * 1024
 
 
 class BackupError(RuntimeError):
@@ -184,6 +185,12 @@ def _restore(args) -> tuple[Path, Path]:
         raise BackupError("database filename must be a safe, non-reserved file name")
     if not _regular_file(archive_path):
         raise BackupError("backup archive not found or is not a regular file")
+    try:
+        archive_size = archive_path.stat().st_size
+    except OSError as exc:
+        raise BackupError("could not inspect backup archive") from exc
+    if archive_size > MAX_ARCHIVE_BYTES:
+        raise BackupError("backup archive exceeds compressed size limit (520 MiB)")
     data_resolved = data_dir.resolve()
     preset_resolved = preset_dir.resolve()
     if data_resolved == preset_resolved or data_resolved in preset_resolved.parents or preset_resolved in data_resolved.parents:
